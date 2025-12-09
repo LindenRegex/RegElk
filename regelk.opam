@@ -1,0 +1,17 @@
+opam-version: "2.0"
+synopsis: "OCaml Linear Engine for JavaScript Regexes"
+authors: ["Aurèle Barrière" "Clément Pit-Claudel"]
+homepage: "https://github.com/epfl-systemf/RegElk"
+depends: [
+    "ocaml" {>= "5.0.0"}
+    "yojson" {= "2.1.0"}
+    "menhir" {= "20220210"}
+    "core" {= "v0.15.1"}
+    "core_unix" {= "v0.15.2"}
+    "core_bench" {= "v0.15.0"}
+    "ocamlbuild" {= "0.14.1"}
+    "ocaml_intrinsics" {= "v0.15.2"}
+    "ocamlfind" {= "1.9.8"}
+]
+build: [
+]
