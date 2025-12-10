@@ -128,18 +128,23 @@ let common_prefix (s1:string) (s2:string) : string =
   let len = aux 0 in
   String.sub s1 0 len
 
+let drop_first_n (s : string) (n : int) : string =
+  let len = String.length s in
+  if n >= len then ""
+  else String.sub s n (len - n)
+
 let merge (a:literal*int) (b:literal*int) : literal * int =
   match a, b with
   | (Exact s1, n1), (Exact s2, n2) ->
     let n = max n1 n2 in
-    let s1' = String.sub s1 (n - n1) (String.length s1) in
-    let s2' = String.sub s2 (n - n2) (String.length s2) in
+    let s1' = drop_first_n s1 (n - n1) in
+    let s2' = drop_first_n s2 (n - n2) in
     if s1' = s2' then (Exact s1', n)
     else (Prefix (common_prefix s1' s2'), n)
   | (Exact s1, n1), (Prefix s2, n2) | (Prefix s1, n1), (Exact s2, n2) | (Prefix s1, n1), (Prefix s2, n2) -> 
     let n = max n1 n2 in
-    let s1' = String.sub s1 (n - n1) (String.length s1) in
-    let s2' = String.sub s2 (n - n2) (String.length s2) in
+    let s1' = drop_first_n s1 (n - n1) in
+    let s2' = drop_first_n s2 (n - n2) in
     (Prefix (common_prefix s1' s2'), n)
 let chain (l1:literal*int) (l2:literal*int) : literal * int =
   match l1, l2 with
@@ -310,30 +315,32 @@ let parse (str:string) (stats:support_stats): parse_result =
     if regex_wf r
     then
       begin
-        stats.parsed <- stats.parsed + 1;
-        let rev_r = rev_regex r in
-        let (front_lit, front_offset) = extract_literal r in
-        let (back_lit, back_offset) = extract_literal rev_r in
-        if (prefix front_lit <> "" && prefix back_lit = "" && front_offset = 0) then stats.front_only_literal <- stats.front_only_literal + 1;
-        if (prefix back_lit <> "" && prefix front_lit = "" && back_offset = 0) then stats.back_only_literal <- stats.back_only_literal + 1;
-        if (prefix front_lit <> "" && prefix back_lit <> "") then stats.both_literal <- stats.both_literal + 1;
-        if (prefix front_lit <> "" && prefix back_lit = "" && front_offset > 0) then stats.front_only_offset_literal <- stats.front_only_offset_literal + 1;
-        if (prefix back_lit <> "" && prefix front_lit = "" && back_offset > 0) then stats.back_only_offset_literal <- stats.back_only_offset_literal + 1;
-        if (match front_lit with Exact _ -> true | _ -> false && not (has_asserts r) && front_offset = 0) then stats.exact_no_assert_literal <- stats.exact_no_assert_literal + 1;
-        if (match front_lit with Exact _ -> true | _ -> false && not (has_asserts r) && not (has_groups r) && front_offset = 0) then stats.exact_no_assert_and_no_groups_literal <- stats.exact_no_assert_and_no_groups_literal + 1;
-        if (anchored r) then stats.anchored <- stats.anchored + 1;
-        if (anchored rev_r) then stats.reverse_anchored <- stats.reverse_anchored + 1;
-        if (anchored r && anchored rev_r) then stats.double_anchored <- stats.double_anchored + 1;
-        if (has_potentially_capture_just_for_grouping r) then stats.captures_for_grouping <- stats.captures_for_grouping + 1;
-        if (not (has_groups r)) then stats.no_captures <- stats.no_captures + 1;
-        if (has_nullable_quant r) then stats.null_quant <- stats.null_quant + 1;
-        if (groups_in_quant r) then stats.quant_groups <- stats.quant_groups + 1;
-        if (has_lookaround r) then stats.lookaround <- stats.lookaround + 1;
-        if (has_nn r) then stats.nn <- stats.nn + 1;
-        if (has_nullplus r) then stats.null_plus <- stats.null_plus + 1;
-        if (has_lazy_nullplus r) then stats.lazy_nullplus <- stats.lazy_nullplus + 1;
-        if (memoryless_lookbehind r) then stats.ml_behind <- stats.ml_behind + 1;
-        OK r
+        try
+          let rev_r = rev_regex r in
+          let (front_lit, front_offset) = extract_literal r in
+          let (back_lit, back_offset) = extract_literal rev_r in
+          if (prefix front_lit <> "" && prefix back_lit = "" && front_offset = 0) then stats.front_only_literal <- stats.front_only_literal + 1;
+          if (prefix back_lit <> "" && prefix front_lit = "" && back_offset = 0) then stats.back_only_literal <- stats.back_only_literal + 1;
+          if (prefix front_lit <> "" && prefix back_lit <> "") then stats.both_literal <- stats.both_literal + 1;
+          if (prefix front_lit <> "" && prefix back_lit = "" && front_offset > 0) then stats.front_only_offset_literal <- stats.front_only_offset_literal + 1;
+          if (prefix back_lit <> "" && prefix front_lit = "" && back_offset > 0) then stats.back_only_offset_literal <- stats.back_only_offset_literal + 1;
+          if (match front_lit with Exact s when s <> "" -> true | _ -> false && not (has_asserts r) && front_offset = 0) then stats.exact_no_assert_literal <- stats.exact_no_assert_literal + 1;
+          if (match front_lit with Exact s when s <> "" -> true | _ -> false && not (has_asserts r) && not (has_groups r) && front_offset = 0) then stats.exact_no_assert_and_no_groups_literal <- stats.exact_no_assert_and_no_groups_literal + 1;
+          if (anchored r) then stats.anchored <- stats.anchored + 1;
+          if (anchored rev_r) then stats.reverse_anchored <- stats.reverse_anchored + 1;
+          if (anchored r && anchored rev_r) then stats.double_anchored <- stats.double_anchored + 1;
+          if (has_potentially_capture_just_for_grouping r) then stats.captures_for_grouping <- stats.captures_for_grouping + 1;
+          if (not (has_groups r)) then stats.no_captures <- stats.no_captures + 1;
+          if (has_nullable_quant r) then stats.null_quant <- stats.null_quant + 1;
+          if (groups_in_quant r) then stats.quant_groups <- stats.quant_groups + 1;
+          if (has_lookaround r) then stats.lookaround <- stats.lookaround + 1;
+          if (has_nn r) then stats.nn <- stats.nn + 1;
+          if (has_nullplus r) then stats.null_plus <- stats.null_plus + 1;
+          if (has_lazy_nullplus r) then stats.lazy_nullplus <- stats.lazy_nullplus + 1;
+          if (memoryless_lookbehind r) then stats.ml_behind <- stats.ml_behind + 1;
+          stats.parsed <- stats.parsed + 1;
+          OK r
+        with e -> Printf.printf "Error while analyzing regex %s: %s\n%!" str (Printexc.to_string e); stats.errors <- stats.errors + 1; ParseError
       end
     else begin stats.notwf <- stats.notwf + 1; NotWF end
   with 
