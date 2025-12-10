@@ -90,7 +90,146 @@ let rec has_lazy_nullplus (r:raw_regex) : bool =
   | Raw_count (q,r1) ->
      has_lazy_nullplus r1 || (raw_nullable r1 <> NonNullable && q.min > 0 && not(q.greedy))
 
+(* whether the regex potentially uses captures just for grouping *)
+(* there is of course no way to tell for certain what the intention was *)
+let rec has_potentially_capture_just_for_grouping (r:raw_regex) : bool =
+  match r with
+  | Raw_empty | Raw_character _ | Raw_anchor _ -> false
+  | Raw_con(r1,r2) | Raw_alt(r1,r2) -> has_potentially_capture_just_for_grouping r1 || has_potentially_capture_just_for_grouping r2
+  | Raw_capture r1 ->
+      begin match r1 with
+      | Raw_alt (_,_) -> true (* capturing an alternation? probably used for grouping *)
+      | _ -> has_potentially_capture_just_for_grouping r1
+      end
+  | Raw_quant (_,r1) | Raw_count (_,r1) ->
+      begin match r1 with
+      | Raw_capture _ -> true (* quantifying a capture? probably used for grouping *)
+      | _ -> has_potentially_capture_just_for_grouping r1
+      end
+  | Raw_lookaround (_,r1) -> has_potentially_capture_just_for_grouping r1
 
+(** * Extracting literals from regexes  *)
+type literal =
+  | Prefix of string
+  | Exact of string
+
+let prefix (l:literal) : string =
+  match l with
+  | Prefix s -> s
+  | Exact s -> s
+
+let common_prefix (s1:string) (s2:string) : string =
+  let min_len = min (String.length s1) (String.length s2) in
+  let rec aux i =
+    if i >= min_len then i
+    else if s1.[i] = s2.[i] then aux (i+1)
+    else i
+  in
+  let len = aux 0 in
+  String.sub s1 0 len
+
+let merge (a:literal*int) (b:literal*int) : literal * int =
+  match a, b with
+  | (Exact s1, n1), (Exact s2, n2) ->
+    let n = max n1 n2 in
+    let s1' = String.sub s1 (n - n1) (String.length s1) in
+    let s2' = String.sub s2 (n - n2) (String.length s2) in
+    if s1' = s2' then (Exact s1', n)
+    else (Prefix (common_prefix s1' s2'), n)
+  | (Exact s1, n1), (Prefix s2, n2) | (Prefix s1, n1), (Exact s2, n2) | (Prefix s1, n1), (Prefix s2, n2) -> 
+    let n = max n1 n2 in
+    let s1' = String.sub s1 (n - n1) (String.length s1) in
+    let s2' = String.sub s2 (n - n2) (String.length s2) in
+    (Prefix (common_prefix s1' s2'), n)
+let chain (l1:literal*int) (l2:literal*int) : literal * int =
+  match l1, l2 with
+  | (Exact s1, n1), (Exact s2, 0) -> (Exact (s1 ^ s2), n1)
+  | (Exact s1, n1), (Exact s2, _) -> (Prefix s1, n1)
+  | (Exact s1, n1), (Prefix s2, 0) -> (Prefix (s1 ^ s2), n1)
+  | (Exact s1, n1), (Prefix s2, _) -> (Prefix s1, n1)
+  | (Prefix s1, n1), _ -> (Prefix s1, n1)
+
+let rec extract_literal (r:raw_regex) : literal * int =
+  match r with
+  | Raw_empty -> (Exact "", 0)
+  | Raw_character c ->
+    begin match c with
+    | Char ch -> (Exact (String.make 1 ch), 0)
+    | _ -> (Exact "", 1)
+    end
+  | Raw_con(r1,r2) -> chain (extract_literal r1) (extract_literal r2)
+  | Raw_alt(r1,r2) -> merge (extract_literal r1) (extract_literal r2)
+  | Raw_capture r1 -> extract_literal r1
+  | Raw_quant (q,r1) -> extract_literal (Raw_count (quant_canonicalize q, r1))
+  | Raw_count ({min = mi; max = ma; greedy = g},r1) when mi > 1000 -> (Prefix "", 0) (* give up on huge unrolls *)
+  | Raw_count ({min = 0; max = _; greedy = _},r1) -> (Prefix "", 0)
+  | Raw_count ({min = mi; max = ma; greedy = g},r1) -> chain (extract_literal r1) (extract_literal (Raw_count ({min = mi-1; max = ma; greedy = g}, r1)))
+  | Raw_lookaround (_,r1) -> (Prefix "", 0)
+  | Raw_anchor _ -> (Prefix "", 0)
+
+(* reverse regex *)
+let rec rev_regex (r:raw_regex) : raw_regex =
+  match r with
+  | Raw_empty -> Raw_empty
+  | Raw_character c -> Raw_character c
+  | Raw_anchor a ->
+    begin match a with
+    | BeginInput -> Raw_anchor EndInput
+    | EndInput -> Raw_anchor BeginInput
+    | WordBoundary -> Raw_anchor WordBoundary
+    | NonWordBoundary -> Raw_anchor NonWordBoundary
+    end
+  | Raw_con(r1,r2) -> Raw_con(rev_regex r2, rev_regex r1)
+  | Raw_alt(r1,r2) -> Raw_alt(rev_regex r1, rev_regex r2)
+  | Raw_capture r1 -> Raw_capture (rev_regex r1)
+  | Raw_quant (q,r1) -> Raw_quant (q, rev_regex r1)
+  | Raw_count (q,r1) -> Raw_count (q, rev_regex r1)
+  | Raw_lookaround (l,r1) ->
+    begin match l with
+    | Lookahead -> Raw_lookaround (Lookbehind, rev_regex r1)
+    | NegLookahead -> Raw_lookaround (NegLookbehind, rev_regex r1)
+    | Lookbehind -> Raw_lookaround (Lookahead, rev_regex r1)
+    | NegLookbehind -> Raw_lookaround (NegLookahead, rev_regex r1)
+    end
+
+(* whether there are zero length assertions *)
+let rec has_asserts (r:raw_regex) : bool =
+  match r with
+  | Raw_empty | Raw_character _ -> false
+  | Raw_anchor _ -> true
+  | Raw_con(r1,r2) | Raw_alt(r1,r2) -> has_asserts r1 || has_asserts r2
+  | Raw_capture r1 | Raw_quant (_,r1) | Raw_count (_,r1) -> has_asserts r1
+  | Raw_lookaround _ -> true
+
+(* detecting regexes that match exactly the empty string *)
+
+(* if this regex matches exactly only the empty string regardless of context, *)
+(* therefore lookarounds and anchors are not exactly null *)
+let rec matches_exactly_null (r:raw_regex) : bool =
+  match r with
+  | Raw_empty -> true
+  | Raw_character _ -> false
+  | Raw_anchor _ -> false
+  | Raw_con(r1,r2) -> matches_exactly_null r1 && matches_exactly_null r2
+  | Raw_alt(r1,r2) -> matches_exactly_null r1 && matches_exactly_null r2
+  | Raw_capture r1 | Raw_lookaround (_,r1) -> matches_exactly_null r1
+  | Raw_quant (q,r1) -> matches_exactly_null (Raw_count (quant_canonicalize q, r1))
+  | Raw_count (q,r1) ->
+     if q.max = Some 0 then true else matches_exactly_null r1
+
+(* detecting anchored regexes *)
+let rec anchored (r:raw_regex) : bool =
+  match r with
+  | Raw_empty -> false
+  | Raw_character _ -> false
+  | Raw_anchor BeginInput -> true
+  | Raw_anchor _ -> false
+  | Raw_con(r1,r2) -> anchored r1 || (matches_exactly_null r1 && anchored r2)
+  | Raw_alt(r1,r2) -> anchored r1 && anchored r2
+  | Raw_capture r1 -> anchored r1
+  | Raw_quant (q,r1) -> anchored (Raw_count (quant_canonicalize q, r1))
+  | Raw_count (q,r1) -> if q.min = 0 then false else anchored r1
+  | Raw_lookaround (_,r1) -> true
     
 (* detecting regexes that can be supported by the memoryless lookbehind only *)
 (* they need to have lookbehinds without groups in them or negative lookbehinds *)
@@ -141,12 +280,27 @@ type support_stats = {
     mutable null_plus:int;
     mutable lazy_nullplus: int;
     mutable ml_behind:int;
+    mutable front_only_literal:int;
+    mutable back_only_literal:int;
+    mutable front_only_offset_literal:int;
+    mutable back_only_offset_literal:int;
+    mutable both_literal:int;
+    mutable exact_no_assert_literal:int;
+    mutable exact_no_assert_and_no_groups_literal:int;
+    mutable anchored:int;
+    mutable reverse_anchored:int;
+    mutable double_anchored:int;
+    mutable captures_for_grouping:int;
+    mutable no_captures:int;
   }
 
 let init_stats () : support_stats =
   { named=0; hex=0; unicode=0; prop=0; backref=0; notwf=0; octal=0;
     errors=0; parsed=0; total=0;
-    null_quant=0; quant_groups=0; lookaround=0; nn=0; null_plus=0; lazy_nullplus=0; ml_behind=0; }
+    null_quant=0; quant_groups=0; lookaround=0; nn=0; null_plus=0; lazy_nullplus=0; ml_behind=0;
+    front_only_literal=0; back_only_literal=0; front_only_offset_literal=0; back_only_offset_literal=0;
+    both_literal=0; exact_no_assert_literal=0; exact_no_assert_and_no_groups_literal=0; anchored=0; reverse_anchored=0; double_anchored=0; 
+    captures_for_grouping=0; no_captures=0; }
 
 (* parsing a string for a regex *)
 let parse (str:string) (stats:support_stats): parse_result =
@@ -157,6 +311,21 @@ let parse (str:string) (stats:support_stats): parse_result =
     then
       begin
         stats.parsed <- stats.parsed + 1;
+        let rev_r = rev_regex r in
+        let (front_lit, front_offset) = extract_literal r in
+        let (back_lit, back_offset) = extract_literal rev_r in
+        if (prefix front_lit <> "" && prefix back_lit = "" && front_offset = 0) then stats.front_only_literal <- stats.front_only_literal + 1;
+        if (prefix back_lit <> "" && prefix front_lit = "" && back_offset = 0) then stats.back_only_literal <- stats.back_only_literal + 1;
+        if (prefix front_lit <> "" && prefix back_lit <> "") then stats.both_literal <- stats.both_literal + 1;
+        if (prefix front_lit <> "" && prefix back_lit = "" && front_offset > 0) then stats.front_only_offset_literal <- stats.front_only_offset_literal + 1;
+        if (prefix back_lit <> "" && prefix front_lit = "" && back_offset > 0) then stats.back_only_offset_literal <- stats.back_only_offset_literal + 1;
+        if (match front_lit with Exact _ -> true | _ -> false && not (has_asserts r) && front_offset = 0) then stats.exact_no_assert_literal <- stats.exact_no_assert_literal + 1;
+        if (match front_lit with Exact _ -> true | _ -> false && not (has_asserts r) && not (has_groups r) && front_offset = 0) then stats.exact_no_assert_and_no_groups_literal <- stats.exact_no_assert_and_no_groups_literal + 1;
+        if (anchored r) then stats.anchored <- stats.anchored + 1;
+        if (anchored rev_r) then stats.reverse_anchored <- stats.reverse_anchored + 1;
+        if (anchored r && anchored rev_r) then stats.double_anchored <- stats.double_anchored + 1;
+        if (has_potentially_capture_just_for_grouping r) then stats.captures_for_grouping <- stats.captures_for_grouping + 1;
+        if (not (has_groups r)) then stats.no_captures <- stats.no_captures + 1;
         if (has_nullable_quant r) then stats.null_quant <- stats.null_quant + 1;
         if (groups_in_quant r) then stats.quant_groups <- stats.quant_groups + 1;
         if (has_lookaround r) then stats.lookaround <- stats.lookaround + 1;
@@ -201,6 +370,20 @@ let print_stats (s:support_stats) : string =
   "\nUnsupported Octal: " ^ string_of_int s.octal ^ 
   "\nNot WellFormed: " ^ string_of_int s.notwf ^
   "\nErrors: " ^ string_of_int s.errors ^
+
+  "\n\nMETA ENGINE" ^
+  "\nRegexes with only a front literal: " ^ string_of_int s.front_only_literal ^
+  "\nRegexes with only a back literal: " ^ string_of_int s.back_only_literal ^
+  "\nRegexes with only a front offset literal: " ^ string_of_int s.front_only_offset_literal ^
+  "\nRegexes with only a back offset literal: " ^ string_of_int s.back_only_offset_literal ^
+  "\nRegexes with both front and back literals: " ^ string_of_int s.both_literal ^
+  "\nRegexes with exact literal and no asserts: " ^ string_of_int s.exact_no_assert_literal ^
+  "\nRegexes with exact literal and no asserts and no groups: " ^ string_of_int s.exact_no_assert_and_no_groups_literal ^
+  "\nAnchored Regexes: " ^ string_of_int s.anchored ^
+  "\nReverse Anchored Regexes: " ^ string_of_int s.reverse_anchored ^
+  "\nDouble Anchored Regexes: " ^ string_of_int s.double_anchored ^
+  "\nRegexes with captures probably only for grouping: " ^ string_of_int s.captures_for_grouping ^
+  "\nRegexes with no captures at all: " ^ string_of_int s.no_captures ^
 
   "\n\nNUMBERS FOR FIGURE16:" ^ 
   "\nPARSED REGEXES / TOTAL REGEXES: " ^ string_of_int s.parsed ^ " / " ^ string_of_int s.total ^
