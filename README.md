@@ -56,16 +56,8 @@ Named capture groups, hexadecimal escapes, unicode escapes, unicode properties a
 
 
 ## Dependencies
-You need the following Opam packages.
-Other version numbers may also work.
-- Ocaml 5.0
-- ocamlbuild 0.14.1
-- Menhir 20220210
-- ocaml_intrinsics v0.15.2
-- core_bench v0.15.0
-- core v0.15.1
-- core_unix v0.15.2
-- yojson 2.1.0
+
+Install all dependencies with Opam by running `opam install .`
 
 You also need to install Node.JS and have `node` in your path.
 
