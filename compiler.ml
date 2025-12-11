@@ -95,7 +95,7 @@ let rec compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist 
          let (min_code, min_fresh) = repeat_min (quant.min-1) qid r1 fresh ctype in
          (* fork between the non-nullable repetition or the nulled branch *)
          let (body_code, body_fresh) = compile r1 (min_fresh+3) ctype in
-         (min_code @@ Leaf [Fork (min_fresh+1, body_fresh+2); SetQuantToClock (qid, false); BeginLoop] @@ body_code @@ Leaf [EndLoop; Fork (min_fresh+1, body_fresh+3); SetQuantToClock (qid, true)],body_fresh+3)
+         (min_code @@ Leaf [Fork (min_fresh+1, body_fresh+2); SetQuantToClock (qid, false); BeginLoop] @@ body_code @@ Leaf [EndLoop (body_fresh+1, body_fresh+2); Fork (min_fresh+1, body_fresh+3); SetQuantToClock (qid, true)],body_fresh+3)
        end
 
      (** particular case of the greedy CDN + *)
@@ -105,7 +105,7 @@ let rec compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist 
          let (min_code, min_fresh) = repeat_min (quant.min-1) qid r1 fresh ctype in
          (* fork between the non-nullable repetition or the nulled branch with a CDN test *)
          let (body_code, body_fresh) = compile r1 (min_fresh+3) ctype in
-         (min_code @@ Leaf [Fork (min_fresh+1, body_fresh+2); SetQuantToClock (qid, false); BeginLoop] @@ body_code @@ Leaf [EndLoop; Fork (min_fresh+1, body_fresh+4); CheckNullable qid; SetQuantToClock (qid, true)],body_fresh+4)
+         (min_code @@ Leaf [Fork (min_fresh+1, body_fresh+2); SetQuantToClock (qid, false); BeginLoop] @@ body_code @@ Leaf [EndLoop (body_fresh+1, body_fresh+2); Fork (min_fresh+1, body_fresh+4); CheckNullable qid; SetQuantToClock (qid, true)],body_fresh+4)
        end
 
        
@@ -122,7 +122,7 @@ let rec compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist 
             let (iter_code, iter_fresh) = compile r1 (min_fresh+3) ctype in
             let fork = if quant.greedy then Fork(min_fresh+1, iter_fresh+2)
                        else Fork (iter_fresh+2,min_fresh+1) in
-            (min_code @@ Leaf [fork; SetQuantToClock (qid, false); BeginLoop] @@ iter_code @@ Leaf [EndLoop; Jmp min_fresh],iter_fresh+2)
+            (min_code @@ Leaf [fork; SetQuantToClock (qid, false); BeginLoop] @@ iter_code @@ Leaf [EndLoop (iter_fresh+1, iter_fresh+2); Jmp min_fresh],iter_fresh+2)
          | Some max ->
             (* repeat the optional repetitions max-min times *)
             let (opt_code, opt_fresh) = repeat_optional (max-quant.min) qid r1 min_fresh ctype quant.greedy in
@@ -179,7 +179,7 @@ and repeat_optional (nb:int) (qid:quantid) (r:regex) (fresh:label) (ctype:comp_t
     let (next_code, next_fresh) = repeat_optional (nb-1) qid r (new_fresh+1) ctype greedy in
     let fork = if greedy then Fork(fresh+1,next_fresh)
                else Fork(next_fresh,fresh+1) in
-    (Leaf [fork; SetQuantToClock (qid,false); BeginLoop] @@ body_code @@ Leaf [EndLoop] @@ next_code,next_fresh)
+    (Leaf [fork; SetQuantToClock (qid,false); BeginLoop] @@ body_code @@ Leaf [EndLoop (new_fresh+1, new_fresh+2)] @@ next_code,next_fresh)
   
     
                  

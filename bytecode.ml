@@ -22,7 +22,8 @@ type instruction =
   | NegCheckOracle of lookid    (* same, but expects a negative answer *)
   | WriteOracle of lookid       (* when we find a match, we write to the oracle at CP *)
   | BeginLoop                   (* start of loop: we set a counter to prevent exiting it using only epsilon transitions *)
-  | EndLoop                     (* end of loop: fails if we started the loop without consuming in the string *)
+  | EndLoop of label * label    (* end of loop: goes to the first label if we did make progress, the second otherwise *)
+  (* This EndLoop is different for the PCRE/.NET case: for JS, we would just die if not making progress *)
   | CheckNullable of quantid    (* checks that a + is nullable *)
   | AnchorAssertion of anchor   (* checks that an anchor is satisfied *)
   | Fail                        (* kills the current thread *)
@@ -66,7 +67,7 @@ let print_instruction (i:instruction) : string =
   | NegCheckOracle l -> "NegCheckOracle " ^ string_of_int l
   | WriteOracle l -> "WriteOracle " ^ string_of_int l
   | BeginLoop -> "BeginLoop"
-  | EndLoop -> "EndLoop"
+  | EndLoop (l1,l2) -> "EndLoop " ^ string_of_int l1 ^ " " ^ string_of_int l2
   | CheckNullable q -> "CheckNullable " ^ string_of_int q
   | AnchorAssertion a -> "AnchorAssertion " ^ print_anchor a
   | Fail -> "Fail"

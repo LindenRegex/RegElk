@@ -414,11 +414,11 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
           t.exit_allowed <- false;
           t.pc <- t.pc + 1;
           advance_epsilon c s o dir
-       | EndLoop ->
+       | EndLoop (x,y) ->
           (* this transition is only possible if we didn't begin this loop during this epsilon transition phase *)
           begin match t.exit_allowed with
-          | true -> t.pc <- t.pc+1; advance_epsilon c s o dir
-          | false -> s.active <- ac; advance_epsilon c s o dir (* killing the current thread *)
+          | true -> t.pc <- x; advance_epsilon c s o dir
+          | false -> t.pc <- y; advance_epsilon c s o dir (* PCRE/.NET case: move on to after the quantifier *)
           end
        | CheckNullable qid ->
           if (cdn_get s.cdn qid)
