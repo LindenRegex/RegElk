@@ -288,6 +288,9 @@ let print_result (r:regex) (str:string) (c:(int Array.t) option) : string =
 
 (* modifies regs in-place *)
 let rec filter_capture (r:regex) (cap_regs:int Array.t) (cap_clocks: int Array.t) (look_clocks:int Array.t) (quant_clocks:int Array.t) (maxclock:int) : unit =
+  (* In the PCRE/.NET case, we do not perform capture reset, so there is nothing to filter *)
+  ()
+(*
   match r with
   | Re_empty | Re_character _ | Re_anchor _ -> ()
   | Re_alt (r1,r2) -> filter_capture r1 cap_regs cap_clocks look_clocks quant_clocks maxclock;
@@ -330,7 +333,7 @@ and filter_all (r:regex) (regs:int Array.t) : unit = (* clearing all capture gro
      filter_all r1 regs
   | Re_capture (cid, r1) ->
      regs.(start_reg cid) <- -1; filter_all r1 regs
-  | Re_lookaround (lid, l, r1) -> filter_all r1 regs
+  | Re_lookaround (lid, l, r1) -> filter_all r1 regs *)
 
 (* we transform the registers to an Array with constant-time access and insertion when filtering *)
 let filter_reset (r:regex) (capture:Regs.regs) (look:Regs.regs) (quant:Regs.regs) (maxclock:int) : int Array.t =
