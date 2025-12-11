@@ -307,6 +307,26 @@ let paper_tests : (raw_regex*string) list =
    (Raw_con(Raw_quant(Star,Raw_quant(Star,Raw_character(Char('a')))),Raw_lookaround(Lookahead,Raw_character(Char('b')))),"aaaaaaaaaaaaaa") (* (?:a* )*(?=b) *)
   ]
 
+let dotnet_bugs : (raw_regex*string) list =
+  [ (* manually written counter-example *)
+    (* The problem here is that:
+       - we enter the outer star (cannot exit)
+       - we make some progress in the outer star by reading a (can exit)
+       - we enter the inner star (cannot exit)
+       - we exit the inner star (cannot exit)
+       - now we are forced to stop iterate the outer star as well
+       - but actually with .NET semantics we should be allowed top keep iterating
+       the outer star, because we have made some progress in it.
+       To fix, we would need to remember a stack of booleans instead of a single one.
+       This increases the state space to r².
+     *)
+    (Raw_quant(Star,Raw_con(Raw_character(Dot),Raw_quant(Star,Raw_empty))), "aa");
+    (Raw_quant(Star,Raw_con(Raw_character(Dot),Raw_con(Raw_con(Raw_character(Dot),Raw_alt(Raw_character(Dot),Raw_quant(LazyStar,Raw_empty))),Raw_quant(Star,Raw_empty)))),"abacc");
+   (* minimized input *)
+    (Raw_quant(Star,Raw_con(Raw_character(Dot),Raw_con(Raw_con(Raw_character(Dot),Raw_alt(Raw_character(Char('a')),Raw_quant(LazyStar,Raw_empty))),Raw_quant(Star,Raw_capture(Raw_empty))))),"abacc");
+   (* original bug produced by the fuzzer *)
+    (Raw_quant(Star,Raw_con(Raw_character(Dot),Raw_con(Raw_con(Raw_character(Dot),Raw_alt(Raw_character(Char('a')),Raw_quant(LazyStar,Raw_empty))),Raw_quant(Star,Raw_capture(Raw_empty))))),"abaccbbbaabaccccbbabaaabaacaaaccacbcbbbcbcababaabbbaacaccccacacaacbabaacaccbbbbabcaccccccaa")]
+
 (* re-checking a list of previous bugs *)
 let replay_bugs (l:(raw_regex*string) list) =
   List.iter (fun (raw,str) -> ignore(CMP.compare_engines raw str)) l
@@ -319,6 +339,7 @@ let replay_stuck (l:(raw_regex*string) list) =
 (** * Running tests  *)
   
 let tests () =
+  replay_bugs(dotnet_bugs);
   Printf.printf "\027[32mTests: \027[0m\n\n";
   oracle_tests();
   regex_tests();

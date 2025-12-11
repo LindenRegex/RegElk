@@ -8,7 +8,6 @@ int[] groupNumbers = rgx.GetGroupNumbers();
 Match m = rgx.Match(input);
 
 if (m.Success) {
-    // Console.WriteLine("Match: {0}", m.Value);
     foreach (var groupNumber in groupNumbers) {
 	if (m.Groups[groupNumber].Success) {
 	    Console.WriteLine("#{0}:{1}",  groupNumber, m.Groups[groupNumber].Value);
