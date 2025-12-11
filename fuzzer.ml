@@ -10,7 +10,7 @@ open Flags
 open Regs
 
 module Interpreter = Interpreter(List_Regs)
-module CMP = Tojs.Compare(Interpreter)
+module CMP = Todotnet.Compare(Interpreter)
 
 let random_seed = ref 0
       
@@ -35,7 +35,8 @@ let random_char () : char =
   List.nth alphabet idx
 
 let random_quant () : quantifier =
-  match (Random.int 6) with
+  match (Random.int 2) with
+  (* PCRE/.NET: only stars  *)
   | 0 -> Star
   | 1 -> LazyStar
   | 2 -> Plus
@@ -94,7 +95,8 @@ let random_class () : char_class =
   List.init size (fun _ -> random_elt())
 
 let random_character () : character =
-  match (Random.int 5) with
+  match (Random.int 2) with
+  (* PCRE/.NET: just dot and characters *)
   | 0 -> let c = random_char() in Char c
   | 1 -> Dot
   | 2 -> let g = random_group() in Group g
@@ -105,12 +107,13 @@ let random_character () : character =
 (* with a maximal number of recursion [depth] *)
 (* the [look] boolean specifies if lookarounds are allowed *)
 let rec random_regex (depth:int) (look:bool): raw_regex =
-  let max = if look then 13 else 11 in
+  let max = 11 in               (* PCRE/.NET: no lookarounds *)
   let rand = if (depth=0) then Random.int 3 else Random.int max in
   match rand with
   | 0 -> Raw_empty
-  | 1 | 2 | 3 -> let x = random_character() in Raw_character x
-  | 4 -> let a = random_anchor() in Raw_anchor a
+  | 1 | 2 | 3 | 4 -> let x = random_character() in Raw_character x
+  (* PCRE/.NET: no anchors *)
+  (* | 4 -> let a = random_anchor() in Raw_anchor a *)
   | 5 ->
      let r1 = random_regex (depth-1) look in
      let r2 = random_regex (depth-1) look in
@@ -119,21 +122,23 @@ let rec random_regex (depth:int) (look:bool): raw_regex =
      let r1 = random_regex (depth-1) look in
      let r2 = random_regex (depth-1) look in
      Raw_con (r1, r2)
-  | 7 ->
+  | 7 | 8 ->
      let r1 = random_regex (depth-1) look in
      let q = random_quant() in
      Raw_quant(q, r1)
-  | 8 ->
-     let r1 = random_regex (depth-1) look in
-     let q = random_counted_quant() in
-     Raw_count(q, r1)
+  (* PCRE/.NET: no counted quants *)
+  (* | 8 -> *)
+  (*    let r1 = random_regex (depth-1) look in *)
+  (*    let q = random_counted_quant() in *)
+  (*    Raw_count(q, r1) *)
   | 9 | 10 ->
      let r1 = random_regex (depth-1) look in
      Raw_capture(r1)
-  | 11 | 12 ->
-     let r1 = random_regex (depth-1) look in
-     let l = random_look() in
-     Raw_lookaround(l, r1)
+  (* PCRE/.NET: no lookarounds *)
+  (* | 11 | 12 -> *)
+  (*    let r1 = random_regex (depth-1) look in *)
+  (*    let l = random_look() in *)
+  (*    Raw_lookaround(l, r1) *)
   | _ -> failwith "random range error"
 
 
@@ -181,7 +186,7 @@ let fuzzer () : unit =
   Printf.printf "ContextIndependentNullable+: %d\n" !total_cin;
   Printf.printf "NonNullableLazy+:            %d\n" !total_lnn;
   Printf.printf "NullableLazy+:               %d\n" !total_ln;
-  Printf.printf "JS Backtracking Timeouts:    %d\n" !total_timeout
+  Printf.printf "Backtracking Timeouts:       %d\n" !total_timeout
 
 
 (* calling the fuzzer *)
