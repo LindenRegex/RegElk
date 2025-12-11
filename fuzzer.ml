@@ -15,8 +15,8 @@ module CMP = Todotnet.Compare(Interpreter)
 let random_seed = ref 0
       
 (* we restrict ourselves to a small alphabet *)
-let alphabet = ['a'; 'b'; '-']
-(* with a dash (non-ascii) to test word boundaries *)
+let alphabet = ['a'; 'b'; 'c']
+(* with a dash (non-ascii) to test word boundaries. Not for .NET because it gets interpreted as an option *)
 
 let max_depth = 50
 
