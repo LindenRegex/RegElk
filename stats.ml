@@ -14,7 +14,7 @@ let rec has_groups (r:raw_regex) : bool =
   | Raw_con(r1,r2) | Raw_alt(r1,r2) -> has_groups r1 || has_groups r2
   | Raw_quant (_,r1) | Raw_count (_,r1) | Raw_lookaround (_,r1) -> has_groups r1
   | Raw_capture _ -> true
-   
+
 (* detects regexes with a nullable quantifiers *)
 (* that could be vulnerable to the semantic bug we fixed *)
 let rec has_nullable (r:regex) : bool =
@@ -141,7 +141,7 @@ let merge (a:literal*int) (b:literal*int) : literal * int =
     let s2' = drop_first_n s2 (n - n2) in
     if s1' = s2' then (Exact s1', n)
     else (Prefix (common_prefix s1' s2'), n)
-  | (Exact s1, n1), (Prefix s2, n2) | (Prefix s1, n1), (Exact s2, n2) | (Prefix s1, n1), (Prefix s2, n2) -> 
+  | (Exact s1, n1), (Prefix s2, n2) | (Prefix s1, n1), (Exact s2, n2) | (Prefix s1, n1), (Prefix s2, n2) ->
     let n = max n1 n2 in
     let s1' = drop_first_n s1 (n - n1) in
     let s2' = drop_first_n s2 (n - n2) in
@@ -206,22 +206,6 @@ let rec has_asserts (r:raw_regex) : bool =
   | Raw_capture r1 | Raw_quant (_,r1) | Raw_count (_,r1) -> has_asserts r1
   | Raw_lookaround _ -> true
 
-(* detecting regexes that match exactly the empty string *)
-
-(* if this regex matches exactly only the empty string regardless of context, *)
-(* therefore lookarounds and anchors are not exactly null *)
-let rec matches_exactly_null (r:raw_regex) : bool =
-  match r with
-  | Raw_empty -> true
-  | Raw_character _ -> false
-  | Raw_anchor _ -> false
-  | Raw_con(r1,r2) -> matches_exactly_null r1 && matches_exactly_null r2
-  | Raw_alt(r1,r2) -> matches_exactly_null r1 && matches_exactly_null r2
-  | Raw_capture r1 | Raw_lookaround (_,r1) -> matches_exactly_null r1
-  | Raw_quant (q,r1) -> matches_exactly_null (Raw_count (quant_canonicalize q, r1))
-  | Raw_count (q,r1) ->
-     if q.max = Some 0 then true else matches_exactly_null r1
-
 (* detecting anchored regexes *)
 let rec anchored (r:raw_regex) : bool =
   match r with
@@ -229,13 +213,17 @@ let rec anchored (r:raw_regex) : bool =
   | Raw_character _ -> false
   | Raw_anchor BeginInput -> true
   | Raw_anchor _ -> false
-  | Raw_con(r1,r2) -> anchored r1 || (matches_exactly_null r1 && anchored r2)
+  | Raw_con(r1,r2) -> anchored r1 || anchored r2
   | Raw_alt(r1,r2) -> anchored r1 && anchored r2
   | Raw_capture r1 -> anchored r1
   | Raw_quant (q,r1) -> anchored (Raw_count (quant_canonicalize q, r1))
   | Raw_count (q,r1) -> if q.min = 0 then false else anchored r1
-  | Raw_lookaround (_,r1) -> true
-    
+  | Raw_lookaround (l,r1) ->
+        begin match l with
+        | Lookahead -> anchored r1
+        | Lookbehind | NegLookahead | NegLookbehind -> false
+        end
+
 (* detecting regexes that can be supported by the memoryless lookbehind only *)
 (* they need to have lookbehinds without groups in them or negative lookbehinds *)
 (* they also need to not have any lookaheads or positive lookbehinds with groups *)
@@ -251,15 +239,15 @@ let rec lookbehind_only (r:raw_regex) : bool =
      match l with
      | Lookahead | NegLookahead -> raise NotMemoryLess
      | NegLookbehind -> true
-     | Lookbehind -> 
+     | Lookbehind ->
         if (has_groups r1) then raise NotMemoryLess else true
 
 let memoryless_lookbehind (r:raw_regex) : bool =
   try (lookbehind_only r) with NotMemoryLess -> false
 
-    
+
 (** * Parsing and analysing the Corpus  *)
-   
+
 type parse_result =
   | Unsupported
   | NotWF
@@ -304,7 +292,7 @@ let init_stats () : support_stats =
     errors=0; parsed=0; total=0;
     null_quant=0; quant_groups=0; lookaround=0; nn=0; null_plus=0; lazy_nullplus=0; ml_behind=0;
     front_only_literal=0; back_only_literal=0; front_offset_literal=0; back_offset_literal=0;
-    both_literal=0; exact_no_assert_literal=0; exact_no_assert_and_no_groups_literal=0; anchored=0; reverse_anchored=0; double_anchored=0; 
+    both_literal=0; exact_no_assert_literal=0; exact_no_assert_and_no_groups_literal=0; anchored=0; reverse_anchored=0; double_anchored=0;
     captures_for_grouping=0; no_captures=0; }
 
 (* parsing a string for a regex *)
@@ -343,7 +331,7 @@ let parse (str:string) (stats:support_stats): parse_result =
         with e -> Printf.printf "Error while analyzing regex %s: %s\n%!" str (Printexc.to_string e); stats.errors <- stats.errors + 1; ParseError
       end
     else begin stats.notwf <- stats.notwf + 1; NotWF end
-  with 
+  with
   | Unsupported_named_groups -> stats.named <- stats.named + 1; Unsupported
   | Unsupported_hex -> stats.hex <- stats.hex + 1; Unsupported
   | Unsupported_unicode -> stats.unicode <- stats.unicode + 1; Unsupported
@@ -374,7 +362,7 @@ let print_stats (s:support_stats) : string =
   "\nUnsupported Unicode Escapes: " ^ string_of_int s.unicode ^
   "\nUnsupported Unicode Properties: " ^ string_of_int s.prop ^
   "\nUnsupported Backreferences: " ^ string_of_int s.backref ^
-  "\nUnsupported Octal: " ^ string_of_int s.octal ^ 
+  "\nUnsupported Octal: " ^ string_of_int s.octal ^
   "\nNot WellFormed: " ^ string_of_int s.notwf ^
   "\nErrors: " ^ string_of_int s.errors ^
 
@@ -392,7 +380,7 @@ let print_stats (s:support_stats) : string =
   "\nRegexes with captures probably only for grouping: " ^ string_of_int s.captures_for_grouping ^
   "\nRegexes with no captures at all: " ^ string_of_int s.no_captures ^
 
-  "\n\nNUMBERS FOR FIGURE16:" ^ 
+  "\n\nNUMBERS FOR FIGURE16:" ^
   "\nPARSED REGEXES / TOTAL REGEXES: " ^ string_of_int s.parsed ^ " / " ^ string_of_int s.total ^
   "\nNullable Quantifiers: " ^ string_of_int s.null_quant ^
   "\nCapture Groups in Quantifiers: " ^ string_of_int s.quant_groups ^
@@ -400,20 +388,20 @@ let print_stats (s:support_stats) : string =
   "\nNonNullable, min>0 quantifiers (Non-nullable +): " ^ string_of_int s.nn ^
   "\nNullable Greedy min>0 quantifiers (CIN&CDN greedy +): " ^ string_of_int s.null_plus ^
   "\nNullable NonGreedy min>0 quantifiers (CIN&CDN lazy +?): " ^ string_of_int s.lazy_nullplus ^
-  "\nMemoryLess Lookbehinds without groups (Captureless lookbehinds): " ^ string_of_int s.ml_behind ^ 
+  "\nMemoryLess Lookbehinds without groups (Captureless lookbehinds): " ^ string_of_int s.ml_behind ^
   "\n"
-    
+
 
 let analyze_regex (regex_str:string) (stats:support_stats) =
   let result = parse regex_str stats in
   match result with
   | OK r -> if false then   (* select what you want to print *)
-              begin Printf.printf "\n\027[36m%s\027[0m\n%!" regex_str; 
+              begin Printf.printf "\n\027[36m%s\027[0m\n%!" regex_str;
                     Printf.printf "%s\n%!" (print_result result)
               end
   | ParseError -> ()
   | _ -> ()
-  
+
 let analyze_corpus (filename:string) (single:bool) (st:support_stats option) : string =
   let stats =
     match st with
@@ -426,7 +414,7 @@ let analyze_corpus (filename:string) (single:bool) (st:support_stats option) : s
       (* the list of all patterns defined on that line *)
       let regex_str = try
           let json_str = Yojson.Basic.from_string str in
-          if single then 
+          if single then
             [json_str |> member "pattern" |> to_string]
           else
             List.map (to_string) (json_str |> member "patterns" |> to_list)
@@ -443,8 +431,8 @@ let analyze_corpus (filename:string) (single:bool) (st:support_stats option) : s
 let analyze_single_corpus filename single: unit =
   let result = analyze_corpus filename single None in
   Printf.printf ("%s\n%!") result
-  
-  
+
+
 let main =
   let corpora = [("corpus/npm-uniquePatterns.json",true);
                  ("corpus/pypi-uniquePatterns.json",true);
@@ -453,10 +441,9 @@ let main =
                  ("corpus/uniq-regexes-8.json",true)] in
 
   (* individual stats *)
-  List.iter (fun (f,b) -> analyze_single_corpus f b) corpora;
+  (* List.iter (fun (f,b) -> analyze_single_corpus f b) corpora; *)
 
   (* getting total stats *)
   let stats = init_stats() in
   List.iter (fun (f,b) -> ignore(analyze_corpus f b (Some stats))) corpora;
   Printf.printf ("\027[33mAll Corpus\027[0m:\n%s\n") (print_stats stats)
-    
