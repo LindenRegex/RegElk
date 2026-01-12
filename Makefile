@@ -16,7 +16,7 @@ parser_clean:
 	rm -f parser/*
 
 %.native: %.ml $(FILES) $(PARSER_FILES) $(PARSER_SRC)
-	ocamlbuild -I parser -package unix -package ocaml_intrinsics -package core_bench -package core -package core_unix.command_unix -package yojson $@
+	ocamlbuild -I parser -package unix -package core  -package yojson $@
 
 
 main: main.native
