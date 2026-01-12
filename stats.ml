@@ -391,6 +391,15 @@ let print_stats (s:support_stats) : string =
   "\nMemoryLess Lookbehinds without groups (Captureless lookbehinds): " ^ string_of_int s.ml_behind ^
   "\n"
 
+let print_stats_csv (s:support_stats) : string =
+  let csv_header = "named,hex,unicode,prop,backref,octal,notwf,errors,parsed,total,null_quant,quant_groups,lookaround,nn,null_plus,lazy_nullplus,ml_behind,front_only_literal,back_only_literal,front_offset_literal,back_offset_literal,both_literal,exact_no_assert_literal,exact_no_assert_and_no_groups_literal,anchored,reverse_anchored,double_anchored,captures_for_grouping,no_captures" in
+  let csv_values = Printf.sprintf "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d"
+    s.named s.hex s.unicode s.prop s.backref s.octal s.notwf s.errors s.parsed s.total
+    s.null_quant s.quant_groups s.lookaround s.nn s.null_plus s.lazy_nullplus s.ml_behind
+    s.front_only_literal s.back_only_literal s.front_offset_literal s.back_offset_literal
+    s.both_literal s.exact_no_assert_literal s.exact_no_assert_and_no_groups_literal
+    s.anchored s.reverse_anchored s.double_anchored s.captures_for_grouping s.no_captures in
+  csv_header ^ "\n" ^ csv_values
 
 let analyze_regex (regex_str:string) (stats:support_stats) =
   let result = parse regex_str stats in
@@ -446,4 +455,4 @@ let main =
   (* getting total stats *)
   let stats = init_stats() in
   List.iter (fun (f,b) -> ignore(analyze_corpus f b (Some stats))) corpora;
-  Printf.printf ("\027[33mAll Corpus\027[0m:\n%s\n") (print_stats stats)
+  Printf.printf "%s\n" (print_stats_csv stats)
