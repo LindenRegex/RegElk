@@ -278,6 +278,7 @@ type support_stats = {
     mutable front_offset_literal:int;
     mutable back_offset_literal:int;
     mutable both_literal:int;
+    mutable exact_literal:int;
     mutable exact_no_assert_literal:int;
     mutable exact_no_assert_and_no_groups_literal:int;
     mutable anchored:int;
@@ -292,7 +293,7 @@ let init_stats () : support_stats =
     errors=0; parsed=0; total=0;
     null_quant=0; quant_groups=0; lookaround=0; nn=0; null_plus=0; lazy_nullplus=0; ml_behind=0;
     front_only_literal=0; back_only_literal=0; front_offset_literal=0; back_offset_literal=0;
-    both_literal=0; exact_no_assert_literal=0; exact_no_assert_and_no_groups_literal=0; anchored=0; reverse_anchored=0; double_anchored=0;
+        both_literal=0; exact_no_assert_literal=0; exact_literal=0; exact_no_assert_and_no_groups_literal=0; anchored=0; reverse_anchored=0; double_anchored=0;
     captures_for_grouping=0; no_captures=0; }
 
 (* parsing a string for a regex *)
@@ -312,6 +313,7 @@ let parse (str:string) (stats:support_stats): parse_result =
           if (prefix front_lit <> "" && prefix back_lit <> "") then stats.both_literal <- stats.both_literal + 1;
           if (prefix front_lit <> "" && front_offset > 0) then stats.front_offset_literal <- stats.front_offset_literal + 1;
           if (prefix back_lit <> "" && back_offset > 0) then stats.back_offset_literal <- stats.back_offset_literal + 1;
+          if (match front_lit with Exact s when s <> "" -> true | _ -> false && front_offset = 0) then stats.exact_literal <- stats.exact_literal + 1;
           if (match front_lit with Exact s when s <> "" -> true | _ -> false && not (has_asserts r) && front_offset = 0) then stats.exact_no_assert_literal <- stats.exact_no_assert_literal + 1;
           if (match front_lit with Exact s when s <> "" -> true | _ -> false && not (has_asserts r) && not (has_groups r) && front_offset = 0) then stats.exact_no_assert_and_no_groups_literal <- stats.exact_no_assert_and_no_groups_literal + 1;
           if (anchored r) then stats.anchored <- stats.anchored + 1;
@@ -372,6 +374,7 @@ let print_stats (s:support_stats) : string =
   "\nRegexes with a front offset literal: " ^ string_of_int s.front_offset_literal ^
   "\nRegexes with a back offset literal: " ^ string_of_int s.back_offset_literal ^
   "\nRegexes with both front and back literals: " ^ string_of_int s.both_literal ^
+  "\nRegexes with exact literal: " ^ string_of_int s.exact_literal ^
   "\nRegexes with exact literal and no asserts: " ^ string_of_int s.exact_no_assert_literal ^
   "\nRegexes with exact literal and no asserts and no groups: " ^ string_of_int s.exact_no_assert_and_no_groups_literal ^
   "\nAnchored Regexes: " ^ string_of_int s.anchored ^
@@ -392,12 +395,12 @@ let print_stats (s:support_stats) : string =
   "\n"
 
 let print_stats_csv (s:support_stats) : string =
-  let csv_header = "named,hex,unicode,prop,backref,octal,notwf,errors,parsed,total,null_quant,quant_groups,lookaround,nn,null_plus,lazy_nullplus,ml_behind,front_only_literal,back_only_literal,front_offset_literal,back_offset_literal,both_literal,exact_no_assert_literal,exact_no_assert_and_no_groups_literal,anchored,reverse_anchored,double_anchored,captures_for_grouping,no_captures" in
-  let csv_values = Printf.sprintf "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d"
+  let csv_header = "named,hex,unicode,prop,backref,octal,notwf,errors,parsed,total,null_quant,quant_groups,lookaround,nn,null_plus,lazy_nullplus,ml_behind,front_only_literal,back_only_literal,front_offset_literal,back_offset_literal,both_literal,exact_literal,exact_no_assert_literal,exact_no_assert_and_no_groups_literal,anchored,reverse_anchored,double_anchored,captures_for_grouping,no_captures" in
+  let csv_values = Printf.sprintf "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d"
     s.named s.hex s.unicode s.prop s.backref s.octal s.notwf s.errors s.parsed s.total
     s.null_quant s.quant_groups s.lookaround s.nn s.null_plus s.lazy_nullplus s.ml_behind
     s.front_only_literal s.back_only_literal s.front_offset_literal s.back_offset_literal
-    s.both_literal s.exact_no_assert_literal s.exact_no_assert_and_no_groups_literal
+    s.both_literal s.exact_literal s.exact_no_assert_literal s.exact_no_assert_and_no_groups_literal
     s.anchored s.reverse_anchored s.double_anchored s.captures_for_grouping s.no_captures in
   csv_header ^ "\n" ^ csv_values
 
