@@ -327,20 +327,24 @@ let parse (str:string) (stats:support_stats): parse_result =
           let rev_r = rev_regex r in
           let (front_lit, front_offset) = extract_literal r in
           let (back_lit, back_offset) = extract_literal rev_r in
+          let has_asserts_ = has_asserts r in
+          let has_captures = has_groups r in
+          let is_anchored = anchored r in
+          let is_rev_anchored = anchored rev_r in
           if (front_lit <> Prefix "" && back_lit = Prefix "" && front_offset = 0) then stats.front_only_literal <- stats.front_only_literal + 1;
           if (back_lit <> Prefix "" && front_lit = Prefix "" && back_offset = 0) then stats.back_only_literal <- stats.back_only_literal + 1;
           if (front_lit <> Prefix "" && back_lit <> Prefix "" && front_offset = 0 && back_offset = 0) then stats.both_literal <- stats.both_literal + 1;
           if (prefix front_lit <> "" && front_offset > 0) then stats.front_offset_literal <- stats.front_offset_literal + 1;
           if (prefix back_lit <> "" && back_offset > 0) then stats.back_offset_literal <- stats.back_offset_literal + 1;
           if (has_impossible_literal r) then stats.impossible_literal <- stats.impossible_literal + 1;
-          if (match front_lit with Exact _ -> true | _ -> false && front_offset = 0) then stats.exact_literal <- stats.exact_literal + 1;
-          if (match front_lit with Exact _ -> true | _ -> false && not (has_asserts r) && front_offset = 0) then stats.exact_no_assert_literal <- stats.exact_no_assert_literal + 1;
-          if (match front_lit with Exact _ -> true | _ -> false && not (has_asserts r) && not (has_groups r) && front_offset = 0) then stats.exact_no_assert_and_no_groups_literal <- stats.exact_no_assert_and_no_groups_literal + 1;
-          if (anchored r) then stats.anchored <- stats.anchored + 1;
-          if (anchored rev_r) then stats.reverse_anchored <- stats.reverse_anchored + 1;
-          if (anchored r && anchored rev_r) then stats.double_anchored <- stats.double_anchored + 1;
+          if ((match front_lit with Exact _ -> true | _ -> false) && front_offset = 0) then stats.exact_literal <- stats.exact_literal + 1;
+          if ((match front_lit with Exact _ -> true | _ -> false) && not (has_asserts_) && front_offset = 0) then stats.exact_no_assert_literal <- stats.exact_no_assert_literal + 1;
+          if ((match front_lit with Exact _ -> true | _ -> false) && not (has_asserts_) && not (has_captures) && front_offset = 0) then stats.exact_no_assert_and_no_groups_literal <- stats.exact_no_assert_and_no_groups_literal + 1;
+          if (is_anchored) then stats.anchored <- stats.anchored + 1;
+          if (is_rev_anchored) then stats.reverse_anchored <- stats.reverse_anchored + 1;
+          if (is_anchored && is_rev_anchored) then stats.double_anchored <- stats.double_anchored + 1;
           if (has_potentially_capture_just_for_grouping r) then stats.captures_for_grouping <- stats.captures_for_grouping + 1;
-          if (not (has_groups r)) then stats.no_captures <- stats.no_captures + 1;
+          if (not (has_captures)) then stats.no_captures <- stats.no_captures + 1;
           if (has_nullable_quant r) then stats.null_quant <- stats.null_quant + 1;
           if (groups_in_quant r) then stats.quant_groups <- stats.quant_groups + 1;
           if (has_lookaround r) then stats.lookaround <- stats.lookaround + 1;
