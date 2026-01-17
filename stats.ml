@@ -169,8 +169,8 @@ let rec extract_literal (r:raw_regex) : literal * int =
   | Raw_count ({min = mi; max = ma; greedy = g},r1) when mi > 1000 -> (Prefix "", 0) (* give up on huge unrolls *)
   | Raw_count ({min = 0; max = _; greedy = _},r1) -> (Prefix "", 0)
   | Raw_count ({min = mi; max = ma; greedy = g},r1) -> chain (extract_literal r1) (extract_literal (Raw_count ({min = mi-1; max = ma; greedy = g}, r1)))
-  | Raw_lookaround (_,r1) -> (Prefix "", 0)
-  | Raw_anchor _ -> (Prefix "", 0)
+  | Raw_lookaround (_,r1) -> (Exact "", 0)
+  | Raw_anchor _ -> (Exact "", 0)
 
 let rec has_impossible_literal (r:raw_regex) : bool =
     match r with
