@@ -474,10 +474,23 @@ let main =
                  ("corpus/internetSources-stackoverflow.json",false);
                  ("corpus/uniq-regexes-8.json",true)] in
 
-  (* individual stats *)
-  (* List.iter (fun (f,b) -> analyze_single_corpus f b) corpora; *)
+  let csv = ref false in
+  let speclist = [
+    ("--csv", Arg.Set csv, "Output CSV format for total stats")
+  ] in
+  let usage_msg = "stats [--csv]" in
+  let () = Arg.parse speclist (fun _ -> ()) usage_msg in
 
-  (* getting total stats *)
-  let stats = init_stats() in
-  List.iter (fun (f,b) -> ignore(analyze_corpus f b (Some stats))) corpora;
-  Printf.printf "%s\n" (print_stats_csv stats)
+  if !csv then begin
+    let stats = init_stats() in
+    List.iter (fun (f,b) -> ignore(analyze_corpus f b (Some stats))) corpora;
+    Printf.printf ("%s\n") (print_stats_csv stats)
+  end else begin
+    (* individual stats *)
+    List.iter (fun (f,b) -> analyze_single_corpus f b) corpora;
+
+    (* getting total stats *)
+    let stats = init_stats() in
+    List.iter (fun (f,b) -> ignore(analyze_corpus f b (Some stats))) corpora;
+    Printf.printf ("\027[33mAll Corpus\027[0m:\n%s\n") (print_stats stats)
+  end
