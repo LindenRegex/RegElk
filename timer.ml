@@ -6,6 +6,5 @@ let elapsed from = Int64.sub (now ()) from
 (* to get an estimate as precise as possible *)
 (* when we measure V8Linear, we also patch it to return rdtsc *)
 (* we use the rdtsc interface provided by the Ocaml_Intrinsics package *)
-(* let now () = Ocaml_intrinsics.Perfmon.rdtsc () *)
-let now () = 0
+let now () = Ocaml_intrinsics.Perfmon.rdtsc ()
 let elapsed from = Int64.sub (now ()) from
