@@ -25,6 +25,7 @@ module type REGS =
     val get_cp: regs -> int -> int option
     val get_clock: regs -> int -> int option
     val copy: regs -> regs
+    val delete: regs -> unit
     val to_arrays: regs -> int Array.t * int Array.t
     val to_string: regs -> string (* for debugging purposes *)
     val name: string
@@ -77,6 +78,9 @@ module Array_Regs =
     (* O(r) *)
     let copy (regs:regs) : regs =
       { a_cp = Array.copy regs.a_cp; a_clk = Array.copy regs.a_clk }
+
+    (* O(1) *)
+    let delete (regs:regs) : unit = ()
 
     (* O(1) *)
     let to_arrays (regs:regs) : int Array.t * int Array.t =
@@ -138,6 +142,9 @@ module List_Regs =
     (* O(1) *)
     let copy (regs:regs) : regs =
       { setlist = regs.setlist; size = regs.size }
+
+    (* O(1) *)
+    let delete (regs:regs) : unit = ()
 
     (* O(r*s) *)
     let to_arrays (regs:regs) : int Array.t * int Array.t =
@@ -203,6 +210,9 @@ module Map_Regs =
     (* O(1) *)
     let copy (regs:regs) : regs =
       { valmap = regs.valmap; size = regs.size }
+
+    (* O(1) *)
+    let delete (regs:regs) : unit = ()
 
     (* O(r) *)
     let to_arrays (regs:regs) : int Array.t * int Array.t =

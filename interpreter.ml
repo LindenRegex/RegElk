@@ -354,7 +354,11 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
   | t::ac -> (* t: highest priority active thread *)
      let i = get_instr c t.pc in
      if (bpc_mem s.processed t.pc t.exit_allowed) then (* killing the lower priority thread if it has already been processed *)
-       begin s.active <- ac; advance_epsilon c s o dir end
+        begin 
+          s.active <- ac;
+          Regs.delete t.capture_regs; Regs.delete t.look_regs; Regs.delete t.quant_regs;
+          advance_epsilon c s o dir 
+        end
      else begin
        s.clock <- s.clock + 1;  (* augmenting the global clock *)
        bpc_add s.processed t.pc t.exit_allowed; (* adding the current pc being handled to the set of proccessed pcs *)
@@ -363,7 +367,8 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
           s.blocked <- add_thread t ce s.blocked s.isblocked; (* also updates isblocked *)
           s.active <- ac;
           advance_epsilon c s o dir
-       | Accept ->             (* updates the best match and don't consider the remain active threads *)
+       | Accept -> (* updates the best match and don't consider the remain active threads *)
+          (* call Regs.delete on all threads in active ? *)
           s.active <- [];
           s.bestmatch <- Some t;
           () (* no recursive call *)
@@ -397,15 +402,22 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
               (* remembering the cp where we last needed the oracle *)
               t.look_regs <- Regs.set_reg t.look_regs l (Some s.cp) s.clock;
             end
-          else s.active <- ac;  (* killing the thread *)
+          else begin
+              Regs.delete t.capture_regs; Regs.delete t.look_regs; Regs.delete t.quant_regs;
+              s.active <- ac;  (* killing the thread *)
+            end;
           advance_epsilon c s o dir
        | NegCheckOracle l ->
           if (get_oracle o s.cp l)
-          then s.active <- ac   (* killing the thread *)
+          then begin
+              Regs.delete t.capture_regs; Regs.delete t.look_regs; Regs.delete t.quant_regs;
+              s.active <- ac   (* killing the thread *)
+            end
           else t.pc <- t.pc + 1;(* keeping the thread alive *)
           advance_epsilon c s o dir
        | WriteOracle l ->
           (* we reached a match but we want to write that into the oracle. we don't discard lower priority threads *)
+          Regs.delete t.capture_regs; Regs.delete t.look_regs; Regs.delete t.quant_regs;
           s.active <- ac;       (* no need to consider that thread anymore *)
           set_oracle o s.cp l;    (* writing to the oracle *)
           advance_epsilon c s o dir (* we keep searching for more matches *) 
@@ -418,19 +430,29 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
           (* this transition is only possible if we didn't begin this loop during this epsilon transition phase *)
           begin match t.exit_allowed with
           | true -> t.pc <- t.pc+1; advance_epsilon c s o dir
-          | false -> s.active <- ac; advance_epsilon c s o dir (* killing the current thread *)
+          | false -> (* killing the current thread *)
+            Regs.delete t.capture_regs; Regs.delete t.look_regs; Regs.delete t.quant_regs;
+            s.active <- ac; 
+            advance_epsilon c s o dir
           end
        | CheckNullable qid ->
           if (cdn_get s.cdn qid)
           then t.pc <- t.pc+1   (* keeping the thread alive *)
-          else s.active <- ac;  (* killing the thread *)
+          else begin (* killing the thread *)
+              Regs.delete t.capture_regs; Regs.delete t.look_regs; Regs.delete t.quant_regs;
+              s.active <- ac
+            end;
           advance_epsilon c s o dir
        | AnchorAssertion a ->
           if (is_satisfied a s.context dir)
           then t.pc <- t.pc+1   (* keeping the thread alive *)
-          else s.active <- ac;  (* killing the thread *)
+          else begin (* killing the thread *)
+              Regs.delete t.capture_regs; Regs.delete t.look_regs; Regs.delete t.quant_regs;
+              s.active <- ac
+            end;
           advance_epsilon c s o dir
        | Fail ->
+          Regs.delete t.capture_regs; Regs.delete t.look_regs; Regs.delete t.quant_regs;
           s.active <- ac;       (* killing the current thread *)
           advance_epsilon c s o dir
      end
