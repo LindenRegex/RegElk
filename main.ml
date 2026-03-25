@@ -14,6 +14,7 @@ type reg_impl =
   | RegArray
   | RegList
   | RegTree
+  | RegVirtualTree
 
 (* Executing the OCaml linear engine on a regex and a string *)
 
@@ -50,6 +51,9 @@ let compare (ri:reg_impl) : raw_regex -> string -> bool =
   | RegTree -> let module INT = Interpreter(Regs.Map_Regs) in
                let module CMP = Tojs.Compare(INT) in
                CMP.compare_engines
+  | RegVirtualTree -> let module INT = Interpreter(Regs.Virtual_Tree_Regs) in
+                      let module CMP = Tojs.Compare(INT) in
+                      CMP.compare_engines
 
 let linear (ri:reg_impl) : raw_regex -> string -> string =
   match ri with
@@ -59,6 +63,8 @@ let linear (ri:reg_impl) : raw_regex -> string -> string =
                INT.get_linear_result
   | RegTree -> let module INT = Interpreter(Regs.Map_Regs) in
                INT.get_linear_result
+  | RegVirtualTree -> let module INT = Interpreter(Regs.Virtual_Tree_Regs) in
+                      INT.get_linear_result
 
 
   
@@ -73,6 +79,7 @@ let main =
      ("-array", Arg.Unit (fun _ -> reg_implem := RegArray), "Use Array registers");
      ("-tree", Arg.Unit (fun _ -> reg_implem := RegTree), "Use Tree registers");
      ("-list", Arg.Unit (fun _ -> reg_implem := RegList), "Use List registers");
+     ("-vt", Arg.Unit (fun _ -> reg_implem := RegVirtualTree), "Use Virtual Tree registers");
     ] in
 
   let usage = "./main.native [-regex \"(b)|.*\"] [-string \"abc\"] [-v] [-d] [-cmp]" in
