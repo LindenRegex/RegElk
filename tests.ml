@@ -380,3 +380,6 @@ let main =
 
   let module T3 = PlayTests(Regs.Map_Regs) in
   T3.tests()
+
+  let module T4 = PlayTests(Regs.Virtual_Tree_Regs) in
+  T4.tests()
