@@ -240,7 +240,7 @@ open Virtual_tree
 open Regsdata
 
 module Regs_Vt = Virtual_tree(Regsdata)
-        
+
 module Virtual_Tree_Regs = 
   struct
     type regs = 

@@ -369,6 +369,8 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
           advance_epsilon c s o dir
        | Accept -> (* updates the best match and don't consider the remain active threads *)
           (* call Regs.delete on all threads in active ? *)
+          (* compression is O(r) !! *)
+          List.iter (fun t -> Regs.delete t.capture_regs; Regs.delete t.look_regs; Regs.delete t.quant_regs) ac;
           s.active <- [];
           s.bestmatch <- Some t;
           () (* no recursive call *)
