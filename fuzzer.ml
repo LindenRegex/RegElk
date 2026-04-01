@@ -9,8 +9,13 @@ open Charclasses
 open Flags
 open Regs
 
-module Interpreter = Interpreter(List_Regs)
-module CMP = Tojs.Compare(Interpreter)
+type reg_impl =
+  | RegArray
+  | RegList
+  | RegTree
+  | RegVirtualTree
+
+let reg_implem = ref RegList    (* by default, use lists *)
 
 let random_seed = ref 0
       
@@ -147,9 +152,26 @@ let random_string () : string =
   let size = (Random.int max_string) in
   String.init size (fun _ -> random_char())
   
+(* choosing the right functions depending on the register implementation *)
+let compare (ri:reg_impl) : raw_regex -> string -> bool =
+  match ri with
+  | RegArray -> let module INT = Interpreter(Regs.Array_Regs) in
+                 let module CMP = Tojs.Compare(INT) in
+                 CMP.compare_engines
+  | RegList -> let module INT = Interpreter(Regs.List_Regs) in
+               let module CMP = Tojs.Compare(INT) in
+               CMP.compare_engines
+  | RegTree -> let module INT = Interpreter(Regs.Map_Regs) in
+               let module CMP = Tojs.Compare(INT) in
+               CMP.compare_engines
+  | RegVirtualTree -> let module INT = Interpreter(Regs.Virtual_Tree_Regs) in
+                      let module CMP = Tojs.Compare(INT) in
+                      CMP.compare_engines
   
 (** * The differential fuzzer itself  *)
 let fuzzer () : unit =
+  
+  let compare_engines = compare !reg_implem in
 
   (* adding some statistics over nullable + *)
   let total_nn = ref 0 in
@@ -162,7 +184,7 @@ let fuzzer () : unit =
   for i = 0 to !max_tests do 
     let raw = random_raw() in
     let str = random_string() in
-    let comp = CMP.compare_engines raw str in
+    let comp = compare_engines raw str in
     if (not comp) then total_timeout := !total_timeout +1;
 
     let (nn,cdn,cin,lnn,ln) = plus_stats (annotate raw) in
@@ -193,6 +215,10 @@ let main =
   let speclist =
     [("-tests", Arg.Set_int max_tests, "Number of tests");
      ("-seed", Arg.Set_int random_seed, "Random seed");
+     ("-array", Arg.Unit (fun _ -> reg_implem := RegArray), "Use Array registers");
+     ("-tree", Arg.Unit (fun _ -> reg_implem := RegTree), "Use Tree registers");
+     ("-list", Arg.Unit (fun _ -> reg_implem := RegList), "Use List registers");
+     ("-vt", Arg.Unit (fun _ -> reg_implem := RegVirtualTree), "Use Virtual Tree registers");
     ] in
 
   let usage = "./fuzzer.native [-tests 1000] [-seed 0]" in
