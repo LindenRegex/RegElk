@@ -13,20 +13,24 @@ open Regs
 module INTARRAY = Interpreter(Regs.Array_Regs) 
 module INTLIST = Interpreter(Regs.List_Regs) 
 module INTTREE = Interpreter(Regs.Map_Regs)
+module INTVIRTUALTREE = Interpreter(Regs.Virtual_Tree_Regs)
 
 let get_matcher (s:string) =
   if (s = "ArrayRegs") then INTARRAY.matcher
   else if (s = "MapRegs") then INTTREE.matcher
+  else if (s = "VirtualTreeRegs") then INTVIRTUALTREE.matcher
   else INTLIST.matcher
 
 let get_build_oracle (s:string) =
   if (s = "ArrayRegs") then INTARRAY.build_oracle
   else if (s = "MapRegs") then INTTREE.build_oracle
+  else if (s = "VirtualTreeRegs") then INTVIRTUALTREE.build_oracle
   else INTLIST.build_oracle
 
 let get_build_capture (s:string) =
   if (s = "ArrayRegs") then INTARRAY.build_capture
   else if (s = "MapRegs") then INTTREE.build_capture
+  else if (s = "VirtualTreeRegs") then INTVIRTUALTREE.build_capture
   else INTLIST.build_capture
 
 

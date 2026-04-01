@@ -242,12 +242,18 @@ let dstree : regex_benchmark =
     param_regex = ds_param_reg;
     input_str = ds_str }
 
+let dsvirtualtree : regex_benchmark =
+  { name = Virtual_Tree_Regs.name;
+    confs = ds_conf;
+    param_regex = ds_param_reg;
+    input_str = ds_str }
+
 
 let all_bench : benchmark list =
   [RB nested_nn_plus; RB nested_cdn; RB clocks;
    RB nested_lookarounds; SB nested_lookarounds_string;
    RB nested_lb; SB nested_lookbehinds_string;
-   RB dsarray; RB dslist; RB dstree]
+   RB dsarray; RB dslist; RB dstree; RB dsvirtualtree]
 
 let bench_names = List.map (fun b -> bench_name b) all_bench
 let bench_names_string =
