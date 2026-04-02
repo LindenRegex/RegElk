@@ -101,9 +101,20 @@ end = struct
   (* Solution 1: use doubly linked list like in Théo's paper *)
   (* Solution 2: convert l to array and merge arrays *)
   let compress_list_and_arrays (a_cp: int Array.t) (a_clk: int Array.t) (l: (int * int * int) list): int Array.t * int Array.t =
-    let size = Array.length a_cp in
+    let rec overwrite_array (l: (int * int * int) list): unit =
+      match l with 
+      | [] -> ()
+      | (i, cp, clk) :: l' ->
+        if (cp <> -1) then a_cp.(i) <- cp;
+        if (clk <> -1) then a_clk.(i) <- clk;
+        overwrite_array l'
+      in
+    overwrite_array (List.rev l);
+    (a_cp, a_clk)
+
+    (*let size = Array.length a_cp in
     let (l_cp, l_clk) = compress_arrays_and_list (Array.make size (-1)) (Array.make size (-1)) l in
-    merge_arrays a_cp l_cp a_clk l_clk
+    merge_arrays a_cp l_cp a_clk l_clk*)
 
   (* t1 is "oldest", t2 is "most recent" *)
   let compress (regs_size: p) (t1: t) (t2: t): t = 
