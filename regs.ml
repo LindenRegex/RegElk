@@ -264,15 +264,14 @@ module Virtual_Tree_Regs =
 
     (* we might remove get_cp and get_clock and always convert to an array first for filtering *)
     let get_cp (regs: regs) (k: int) : int option =
-      (* easy sol for now: just convert to array and take val at index *)
-      (* later: add climbuntil fun in VT or smthg like this *)
-      let d = Regs_Vt.get_data regs.leaf in (* incomplete or complete form, compressed from leaf to root *)
-      opt_of_int (Regsdata.get_cp_at d k)
+      match (Regs_Vt.get_deepest_such_that regs.leaf (fun x -> (Regsdata.get_cp_at x k) <> -1)) with
+      | Some d -> opt_of_int (Regsdata.get_cp_at d k)
+      | None -> None
 
     let get_clock (regs: regs) (k: int) : int option =
-      (* same as get_cp *)
-      let d = Regs_Vt.get_data regs.leaf in (* incomplete or complete form, compressed from leaf to root *)
-      opt_of_int (Regsdata.get_clk_at d k)
+      match (Regs_Vt.get_deepest_such_that regs.leaf (fun x -> (Regsdata.get_clk_at x k) <> -1)) with
+      | Some d -> opt_of_int (Regsdata.get_clk_at d k)
+      | None -> None
 
     let copy (regs: regs): regs =
       (* call split and return result *)
@@ -282,7 +281,7 @@ module Virtual_Tree_Regs =
       Regs_Vt.delete regs.leaf
 
     let to_arrays (regs: regs): int Array.t * int Array.t =
-      Regsdata.to_arrays regs.size (Regs_Vt.get_data regs.leaf)
+      Regsdata.to_arrays regs.size (Regs_Vt.get_compressed_data regs.leaf)
 
     let to_string (regs: regs): string =
       Regs_Vt.to_string regs.leaf

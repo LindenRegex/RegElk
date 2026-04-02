@@ -17,7 +17,8 @@ end) : sig
   val insert : tree -> Data.t -> unit
   val delete : tree -> unit
   val is_empty : tree -> bool
-  val get_data : tree -> Data.t
+  val get_compressed_data : tree -> Data.t
+  val get_deepest_such_that : tree -> (Data.t -> bool) -> Data.t option
 
   (* debugging *)
   val print : tree -> unit
@@ -232,11 +233,20 @@ end = struct
       | Leaf _ -> failwith "Illegal state: a Leaf cannot be a parent."
     )
 
-  let rec get_data (t: tree): data =
+  let rec get_compressed_data (t: tree): data =
     match t with 
     | Root _ -> Data.neutral_element
-    | Node n -> Data.compress n.param (get_data n.parent) n.data
-    | Branch b -> get_data b.parent
-    | Leaf l -> get_data l.parent
+    | Node n -> Data.compress n.param (get_compressed_data n.parent) n.data
+    | Branch b -> get_compressed_data b.parent
+    | Leaf l -> get_compressed_data l.parent
+
+  let rec get_deepest_such_that (t: tree) (f: Data.t -> bool): Data.t option =
+    match t with 
+    | Root _ -> None
+    | Node n -> 
+      if (f n.data) then Some(n.data)
+      else get_deepest_such_that n.parent f
+    | Branch b -> get_deepest_such_that b.parent f
+    | Leaf l -> get_deepest_such_that l.parent f
 
 end
