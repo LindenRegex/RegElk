@@ -254,12 +254,12 @@ module Virtual_Tree_Regs =
 
     let set_reg (regs:regs) (k:int) (cp:int option) (clk:int) : regs =
       (* insert k cp and clk in tree *)
-      Regs_Vt.insert regs.leaf (Regsdata.Incomplete([(k, int_of_opt cp, clk)]));
+      Regs_Vt.insert regs.leaf (Regsdata.Incomplete({size=1; l=[(k, int_of_opt cp, clk)]}));
       regs
 
     let clear_reg (regs:regs) (k:int) : regs = 
       (* insert -1 in tree *)
-      Regs_Vt.insert regs.leaf (Regsdata.Incomplete([(k, -1, -1)]));
+      Regs_Vt.insert regs.leaf (Regsdata.Incomplete({size=1; l=[(k, -1, -1)]}));
       regs
 
     (* we might remove get_cp and get_clock and always convert to an array first for filtering *)
