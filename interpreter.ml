@@ -367,12 +367,18 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
           s.blocked <- add_thread t ce s.blocked s.isblocked; (* also updates isblocked *)
           s.active <- ac;
           advance_epsilon c s o dir
-       | Accept -> (* updates the best match and don't consider the remain active threads *)
+       | Accept -> (* updates the best match and discards the remaining active threads *)
           (* call Regs.delete on all threads in active ? *)
           (* compression is O(r) !! *)
           List.iter (fun t -> Regs.delete t.capture_regs; Regs.delete t.look_regs; Regs.delete t.quant_regs) ac;
           s.active <- [];
+
+          begin match s.bestmatch with
+            | Some bm -> Regs.delete bm.capture_regs; Regs.delete bm.look_regs; Regs.delete bm.quant_regs
+            | None -> ()
+          end;
           s.bestmatch <- Some t;
+
           () (* no recursive call *)
        | Jmp x ->
           t.pc <- x;
@@ -468,9 +474,11 @@ let rec consume (s:interpreter_state): unit =
   | (t,ce)::blocked' ->
      s.blocked <- blocked';
      if (is_accepted s.context.nextchar ce) then
-       begin t.exit_allowed <- true; t.pc <- t.pc + 1; s.active <- t::s.active end;
-     (* adding t to the list of active threads *)
-     (* since t just consumed something, we set its exit_allowed flag to true *)
+       begin t.exit_allowed <- true; t.pc <- t.pc + 1; s.active <- t::s.active end
+      (* adding t to the list of active threads *)
+      (* since t just consumed something, we set its exit_allowed flag to true *)
+     else 
+       begin Regs.delete t.capture_regs; Regs.delete t.look_regs; Regs.delete t.quant_regs end;
      consume s
 
 
