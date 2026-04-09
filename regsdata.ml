@@ -28,11 +28,11 @@ end = struct
       a_clk: int Array.t
     } (*arrays*)
 
-    (* first int: the key *)
-    (* second int: the cp value *)
-    (* third int: the clock value *)
   | Incomplete of {
       size: int;
+      (* first int: the key *)
+      (* second int: the cp value *)
+      (* third int: the clock value *)
       l: (int * int *int) list
     }
 
