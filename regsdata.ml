@@ -17,6 +17,7 @@ module Regsdata : sig
   val neutral_element : t
   val compress : p -> t -> t -> t
   val to_string : t -> string
+  val size_of : t -> int
   val to_arrays : int -> t -> int Array.t * int Array.t
   val get_cp_at : t -> int -> int
   val get_clk_at : t -> int -> int
@@ -60,6 +61,11 @@ end = struct
          "(" ^ string_of_int i ^ "," ^ string_of_int cp ^ "," ^ string_of_int clk ^ ")::" ^ to_string_rec l'
       in
       to_string_rec l.l
+
+  let size_of (v: t) : int =
+    match v with 
+    | Complete arrays -> (Array.length arrays.a_cp) (* all three arrays have the same length *)
+    | Incomplete l -> l.size (* each element of the list contains 3 integers *)
 
   (* a2 is more recent than a1 *)
   let merge_arrays (a1_cp: int Array.t) (a2_cp: int Array.t) (a1_clk: int Array.t) (a2_clk: int Array.t) : int Array.t * int Array.t =

@@ -10,6 +10,7 @@
 
 open Array
 open Map
+open Spacebench
 
 
 module IntMap = Map.Make(struct type t = int let compare = compare end)
@@ -51,6 +52,7 @@ module Array_Regs =
 
     (* O(r) *)
     let init_regs (size:int) : regs =
+      space_increment size;
       { a_cp = Array.make size (-1); a_clk = Array.make size (-1)}
 
     (* O(1) *)
@@ -77,10 +79,12 @@ module Array_Regs =
 
     (* O(r) *)
     let copy (regs:regs) : regs =
+      space_increment (Array.length regs.a_cp);
       { a_cp = Array.copy regs.a_cp; a_clk = Array.copy regs.a_clk }
 
     (* O(1) *)
-    let delete (regs:regs) : unit = ()
+    let delete (regs:regs) : unit = 
+      space_decrement (Array.length regs.a_cp)
 
     (* O(1) *)
     let to_arrays (regs:regs) : int Array.t * int Array.t =
@@ -254,12 +258,14 @@ module Virtual_Tree_Regs =
 
     let set_reg (regs:regs) (k:int) (cp:int option) (clk:int) : regs =
       (* insert k cp and clk in tree *)
-      Regs_Vt.insert regs.leaf (Regsdata.Incomplete({size=1; l=[(k, int_of_opt cp, clk)]}));
+      let size_inserted = Regs_Vt.insert regs.leaf (Regsdata.Incomplete({size=1; l=[(k, int_of_opt cp, clk)]})) in
+      space_increment size_inserted;
       regs
 
     let clear_reg (regs:regs) (k:int) : regs = 
       (* insert -1 in tree *)
-      Regs_Vt.insert regs.leaf (Regsdata.Incomplete({size=1; l=[(k, -1, -1)]}));
+      let size_inserted = Regs_Vt.insert regs.leaf (Regsdata.Incomplete({size=1; l=[(k, -1, -1)]})) in
+      space_increment size_inserted;
       regs
 
     (* we might remove get_cp and get_clock and always convert to an array first for filtering *)
@@ -278,7 +284,8 @@ module Virtual_Tree_Regs =
       { leaf = Regs_Vt.split regs.leaf; size = regs.size}
 
     let delete (regs: regs): unit =
-      Regs_Vt.delete regs.leaf
+      let size_deleted = Regs_Vt.delete regs.leaf in
+      space_decrement size_deleted
 
     let to_arrays (regs: regs): int Array.t * int Array.t =
       Regsdata.to_arrays regs.size (Regs_Vt.get_compressed_data regs.leaf)

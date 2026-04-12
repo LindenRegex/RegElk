@@ -9,6 +9,10 @@ type engine =
   | Irregexp
   | LinearBaseline
 
+type quantity =
+  | Time
+  | Space
+
 let engine_name (e:engine) : string =
   match e with
   | OCaml -> "OCaml"
@@ -22,7 +26,8 @@ let engine_name (e:engine) : string =
 type engine_conf =
   { eng: engine;                (* which engine *)
     min_size: int;              (* minimum size of the benchmark *)
-    max_size: int               (* maximum size of the benchmark *)
+    max_size: int;              (* maximum size of the benchmark *)
+    qua: quantity
   }
 
 
@@ -63,8 +68,8 @@ let rec nested_nn_plus_reg = fun reg_size ->
 let nested_nn_plus_string = String.make 100 'a'
 
 let nn_plus_confs =
-  [ {eng=NewV8Linear; min_size=0; max_size=1000 };
-    {eng=OldV8Linear; min_size=0; max_size=20 } ]
+  [ {eng=NewV8Linear; min_size=0; max_size=1000; qua=Time };
+    {eng=OldV8Linear; min_size=0; max_size=20; qua=Time } ]
 
 let nested_nn_plus : regex_benchmark =
   { name = "NNPlus";
@@ -89,8 +94,8 @@ let rec nested_cdn_reg = fun reg_size ->
 let nested_cdn_string = "b"
 
 let nested_cdn_confs =
-  [ {eng=OCaml; min_size=0; max_size=1000 };
-    {eng=OldV8Linear; min_size=0; max_size=20 } ]
+  [ {eng=OCaml; min_size=0; max_size=1000; qua=Time };
+    {eng=OldV8Linear; min_size=0; max_size=20; qua=Time } ]
 
 let nested_cdn : regex_benchmark =
   { name = "CDN";
@@ -111,8 +116,8 @@ let rec clocks_reg = fun reg_size ->
 let clocks_string = String.make 100 'a'
 
 let clocks_conf =
-  [ {eng=OCaml; min_size=0; max_size=500 };
-    {eng=OldV8Linear; min_size=0; max_size=500 } ]
+  [ {eng=OCaml; min_size=0; max_size=500; qua=Time };
+    {eng=OldV8Linear; min_size=0; max_size=500; qua=Time } ]
 
 let clocks : regex_benchmark =
   { name = "Clocks";
@@ -132,8 +137,8 @@ let rec nested_look_reg = fun reg_size ->
 let nested_look_reg_str = String.make 1000 'a' ^ "b"
 
 let nested_look_conf =
-  [ {eng=OCaml; min_size=0; max_size=1000 };
-    {eng=Irregexp; min_size=0; max_size=1000 } ]
+  [ {eng=OCaml; min_size=0; max_size=1000; qua=Time };
+    {eng=Irregexp; min_size=0; max_size=1000; qua=Time } ]
 
 let nested_lookarounds : regex_benchmark =
   { name = "LAreg";
@@ -151,8 +156,8 @@ let nested_la_param_str = fun str_size ->
   "c" ^ String.make str_size 'a' ^ "b"
 
 let nested_look_str_conf =
-  [ {eng=OCaml; min_size=0; max_size=5000 }; 
-    {eng=Irregexp; min_size=0; max_size=5000 } ]
+  [ {eng=OCaml; min_size=0; max_size=5000; qua=Time }; 
+    {eng=Irregexp; min_size=0; max_size=5000; qua=Time } ]
 
 let nested_lookarounds_string : string_benchmark =
   { name = "LAstr";
@@ -171,10 +176,10 @@ let nested_lb_param_str = fun str_size ->
 
 let nested_lookb_str_conf =
   [ (* {eng=LinearBaseline; min_size=0; max_size=5000 }; *)
-    {eng=OCaml; min_size=0; max_size=5000 };
-    (* {eng=OCamlBench; min_size=0; max_size=3000 }; *)
-    {eng=NewV8Linear; min_size=0; max_size=5000 };
-    {eng=Irregexp; min_size=0; max_size=5000 } ]
+    {eng=OCaml; min_size=0; max_size=5000; qua=Time };
+    (* {eng=OCamlBench; min_size=0; max_size=3000; qua=Time }; *)
+    {eng=NewV8Linear; min_size=0; max_size=5000; qua=Time };
+    {eng=Irregexp; min_size=0; max_size=5000; qua=Time } ]
 
 let nested_lookbehinds_string : string_benchmark =
   { name = "LBstr";
@@ -194,8 +199,8 @@ let rec nested_lb_reg = fun reg_size ->
 let nested_lb_reg_str = "b" ^ String.make 100 'a'
 
 let nested_lb_conf =
-  [ {eng=NewV8Linear; min_size=0; max_size=1000 }; ]
-    (* {eng=Irregexp; min_size=0; max_size=300 } ] *)
+  [ {eng=NewV8Linear; min_size=0; max_size=1000; qua=Time }; ]
+    (* {eng=Irregexp; min_size=0; max_size=300; qua=Time } ] *)
 
 let nested_lb : regex_benchmark =
   { name = "LBreg";
@@ -220,8 +225,15 @@ let ds_param_reg = fun reg_size ->
 
 let ds_str = String.make 1000 'a'
 
+let ds_reg = raw_star(ds_reg 200)
+
+let ds_param_str = fun str_size -> String.make str_size 'a'
+
 let ds_conf =
-  [{eng=OCaml; min_size=0; max_size=500}]
+  [{eng=OCaml; min_size=0; max_size=500; qua=Space}]
+
+let ds_conf_space_s =
+  [{eng=OCaml; min_size=0; max_size=1000; qua=Space}]
 
 let dsarray : regex_benchmark =
   { name = Array_Regs.name;
@@ -248,12 +260,38 @@ let dsvirtualtree : regex_benchmark =
     param_regex = ds_param_reg;
     input_str = ds_str }
 
+let dsarray_s : string_benchmark =
+  { name = Array_Regs.name ^ "_Space_s";
+    (* for array_regs, you can stop at ~200 or it really becomes long *)
+    confs = ds_conf_space_s;
+    param_str = ds_param_str;
+    rgx = ds_reg }
+
+let dslist_s : string_benchmark =
+  { name = List_Regs.name ^ "_Space_s";
+    confs = ds_conf_space_s;
+    param_str = ds_param_str;
+    rgx = ds_reg }
+
+let dstree_s : string_benchmark =
+  { name = Map_Regs.name ^ "_Space_s";
+    confs = ds_conf_space_s;
+    param_str = ds_param_str;
+    rgx = ds_reg }
+
+let dsvirtualtree_s : string_benchmark =
+  { name = Virtual_Tree_Regs.name ^ "_Space_s";
+    confs = ds_conf_space_s;
+    param_str = ds_param_str;
+    rgx = ds_reg }
+
 
 let all_bench : benchmark list =
   [RB nested_nn_plus; RB nested_cdn; RB clocks;
    RB nested_lookarounds; SB nested_lookarounds_string;
    RB nested_lb; SB nested_lookbehinds_string;
-   RB dsarray; RB dslist; RB dstree; RB dsvirtualtree]
+   RB dsarray; RB dslist; RB dstree; RB dsvirtualtree;
+   SB dsarray_s; SB dslist_s; SB dstree_s; SB dsvirtualtree_s]
 
 let bench_names = List.map (fun b -> bench_name b) all_bench
 let bench_names_string =

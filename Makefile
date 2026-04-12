@@ -25,7 +25,8 @@ fuzzer: fuzzer.native
 stats: stats.native
 linearbaseline: linearbaseline.native
 matcher: matcher.native
-benchmark: matcher linearbaseline benchmark.native
+matcher_space: matcher_space.native
+benchmark: matcher matcher_space linearbaseline benchmark.native
 
 clean: parser_clean
 	rm -f -R _build

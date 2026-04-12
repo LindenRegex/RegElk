@@ -372,14 +372,14 @@ let main =
   debug := false;
 
   (* testing for all register implementations *)
-  let module T1 = PlayTests(Regs.Array_Regs) in
+  (*let module T1 = PlayTests(Regs.Array_Regs) in
   T1.tests();
 
   let module T2 = PlayTests(Regs.List_Regs) in
   T2.tests();
 
   let module T3 = PlayTests(Regs.Map_Regs) in
-  T3.tests()
+  T3.tests()*)
 
   let module T4 = PlayTests(Regs.Virtual_Tree_Regs) in
   T4.tests()

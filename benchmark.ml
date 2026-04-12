@@ -78,6 +78,24 @@ let get_time (e:engine) (r:raw_regex) (str:string) (impl:string): string =
   | LinearBaseline -> get_time_ocaml "./linearbaseline.native" r str "ListRegs"
 
 
+(* calling the matcher.native executable *)
+(* returning the rdtsc measuring *)
+let get_space_ocaml (bin: string) (r:raw_regex) (str:string) (impl:string): string =
+  let regex_string = " \""^print_js r^"\" " in
+  let input_string = " \""^str^"\" " in
+  let sys = bin ^ " " ^ regex_string ^ input_string ^ string_of_int !warmups ^ " " ^ string_of_int !repetitions ^ " " ^ impl in
+  string_of_command(sys)
+
+let get_space (e:engine) (r:raw_regex) (str:string) (impl:string): string =
+  match e with
+  | OCaml -> get_space_ocaml "./matcher_space.native" r str impl
+  | OCamlBench -> failwith "TODO"
+  | OldV8Linear -> failwith "TODO"
+  | NewV8Linear -> failwith "TODO"
+  | Irregexp -> failwith "TODO"
+  | LinearBaseline -> failwith "TODO"
+
+
 (* runs a regex-size benchmark on a single engine and prints the result to a csv file *)
 let run_regex_config (ec:engine_conf) (param_regex:int->raw_regex) (str:string) (name:string) : unit =
   Printf.printf "Testing engine %s:\n%!" (engine_name ec.eng);
@@ -85,8 +103,8 @@ let run_regex_config (ec:engine_conf) (param_regex:int->raw_regex) (str:string) 
   for i = ec.min_size to ec.max_size do
     Printf.printf " %s\r%!" (string_of_int i); (* live update *)
     let reg = param_regex i in
-    let time = get_time ec.eng reg str name in
-    Printf.fprintf oc "%d,%s%!" i time; (* printing to the csv file *)
+    let quantity = (if ec.qua = Space then get_space else get_time) ec.eng reg str name in
+    Printf.fprintf oc "%d,%s%!" i quantity; (* printing to the csv file *)
   done;
   close_out oc;
   Printf.printf "\n%!";
@@ -102,8 +120,8 @@ let run_simple_config (ec:engine_conf) (param_str:int->string) (reg:raw_regex) (
   for i = ec.min_size to ec.max_size do
     Printf.printf " %s\r%!" (string_of_int i); (* live update *)
     let str = param_str i in
-    let time = get_time ec.eng reg str name in
-    Printf.fprintf oc "%d,%s%!" i time; (* printing to the csv file *)
+    let quantity = (if ec.qua = Space then get_space else get_time) ec.eng reg str name in
+    Printf.fprintf oc "%d,%s%!" i quantity; (* printing to the csv file *)
   done;
   close_out oc;
   Printf.printf "\n%!";
