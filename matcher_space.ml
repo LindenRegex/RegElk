@@ -100,6 +100,7 @@ let main =
   (* get max_space for each run and sum them all *)
   (*for i = 0 to (repetitions - 1) do*) (*deterministic when using spacebench*)
   max_space := 0;
+  current_space := 0;
   let o = build_oracle compiled_regex string in
   ignore(build_capture compiled_regex string o);
   (*done;*)

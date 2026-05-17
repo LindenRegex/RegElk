@@ -223,17 +223,42 @@ let rec ds_reg = fun reg_size ->
 let ds_param_reg = fun reg_size ->
   raw_star(ds_reg reg_size)
 
-let ds_str = String.make 1000 'a'
+let rec make_con = fun size ->
+  match size with
+  | 0 -> Raw_capture(raw_char('a'))
+  | _ -> Raw_con(Raw_capture(raw_char('a')), make_con(size-1))
+
+let rec ds_reg2 = fun reg_size size ->
+  match reg_size with
+  | 0 -> make_con size
+  | _ -> Raw_alt(ds_reg2 (reg_size - 1) size, ds_reg2 (reg_size - 1) size)
+
+let rec first_part = fun size ->
+  match size with
+  | 0 -> raw_qmark(raw_char('a'))
+  | _ -> Raw_con(raw_qmark(raw_char('a')), first_part(size - 1))
+
+let rec second_part = fun size ->
+  match size with
+  | 0 -> Raw_capture(raw_char('a'))
+  | _ -> Raw_con(Raw_capture(raw_char('a')), (second_part(size - 1)))
+
+let ds_param_reg3 = fun size -> Raw_con(first_part size, Raw_con(second_part size, raw_star(Raw_capture(raw_char('a')))))
+
+let ds_param_reg2 = fun reg_size ->
+  raw_star(ds_reg2 reg_size reg_size)
+
+let ds_str = String.make 10000 'a'
 
 let ds_reg = raw_star(ds_reg 200)
 
 let ds_param_str = fun str_size -> String.make str_size 'a'
 
 let ds_conf =
-  [{eng=OCaml; min_size=0; max_size=500; qua=Space}]
+  [{eng=OCaml; min_size=0; max_size=300; qua=Space}]
 
 let ds_conf_space_s =
-  [{eng=OCaml; min_size=0; max_size=1000; qua=Space}]
+  [{eng=OCaml; min_size=0; max_size=10000; qua=Space}]
 
 let dsarray : regex_benchmark =
   { name = Array_Regs.name;
@@ -245,7 +270,7 @@ let dsarray : regex_benchmark =
 let dslist : regex_benchmark =
   { name = List_Regs.name;
     confs = ds_conf;
-    param_regex = ds_param_reg;
+    param_regex = ds_param_reg3;
     input_str = ds_str }
 
 let dstree : regex_benchmark =
@@ -257,7 +282,7 @@ let dstree : regex_benchmark =
 let dsvirtualtree : regex_benchmark =
   { name = Virtual_Tree_Regs.name;
     confs = ds_conf;
-    param_regex = ds_param_reg;
+    param_regex = ds_param_reg3;
     input_str = ds_str }
 
 let dsarray_s : string_benchmark =

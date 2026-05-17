@@ -257,7 +257,7 @@ end = struct
 
   let rec get_compressed_data (t: tree): data =
     match t with 
-    | Root _ -> Data.neutral_element (*TODO debug here: neutral element gets modified by compress *)
+    | Root _ -> Data.neutral_element (*TODO debug here: neutral element gets modified by compress, just remove it *)
     | Node n -> Data.compress n.param (get_compressed_data n.parent) n.data
     | Branch b -> get_compressed_data b.parent
     | Leaf l -> get_compressed_data l.parent

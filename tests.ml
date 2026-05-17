@@ -373,13 +373,44 @@ let main =
 
   (* testing for all register implementations *)
   (*let module T1 = PlayTests(Regs.Array_Regs) in
-  T1.tests();
+  T1.tests();*)
 
   let module T2 = PlayTests(Regs.List_Regs) in
   T2.tests();
 
-  let module T3 = PlayTests(Regs.Map_Regs) in
+  (*let module T3 = PlayTests(Regs.Map_Regs) in
   T3.tests()*)
 
   let module T4 = PlayTests(Regs.Virtual_Tree_Regs) in
-  T4.tests()
+  T4.tests()(*;
+
+  let a_cp = Array.make 2 (-1) in
+  let a_clk = Array.make 2 (-1) in
+  let a_cp2 = Array.make 2 (-1) in
+  let a_clk2 = Array.make 2 (-1) in
+
+  let rec fill_array (l:(int*int*int) list) : unit =
+    match l with
+    | [] -> ()
+    | (k,cp,clk)::l' ->
+      (* only setting reg values that haven't been set yet *)
+      if (a_cp.(k) = -1) then a_cp.(k) <- cp;
+      if (a_clk.(k) = -1) then a_clk.(k) <- clk;
+      fill_array l' in
+
+  let rec fill_array2 (l: (int*int*int) list) : unit =
+    match l with 
+    | [] -> ()
+    | (k, cp, clk) :: l' ->
+      fill_array2 l'; (* fill with less recent updates first *)
+      a_cp2.(k) <- cp;
+      a_clk2.(k) <- clk in
+
+  let l = [(0, -1, -1); (0, 1, 1)] in
+
+  fill_array2 l;
+  fill_array l;
+  assert ((a_cp, a_clk) = ([|1; -1|], [|1; -1|]));
+  assert ((a_cp2, a_clk2) = ([|-1; -1|], [|-1; -1|]));
+
+  Printf.printf "\027[32mThe arrays are different!\027[0m\n"*)
