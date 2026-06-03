@@ -1,16 +1,15 @@
 
-
 module Virtual_tree (Data : sig
   type t
   type p
-  val neutral_element : t
+  (*val neutral_element : t*)
   (* argument 1: extra parameter for compress *)
   (* argument 2: oldest t value (closest to root) *)
   (* argument 3: most recent t value (closest to leaf) *)
   val compress : p -> t -> t -> t
 
   val to_string : t -> string (* debugging purposes *)
-  val size_of : t -> int (* benchmaarking purposes *)
+  val size_of : t -> int (* benchmarking purposes *)
 end) : sig 
   type tree
   val empty : Data.p -> tree
@@ -18,7 +17,7 @@ end) : sig
   val insert : tree -> Data.t -> int
   val delete : tree -> int
   val is_empty : tree -> bool
-  val get_compressed_data : tree -> Data.t
+  val get_compressed_data : tree -> Data.t option
   val get_deepest_such_that : tree -> (Data.t -> bool) -> Data.t option
 
   (* debugging *)
@@ -179,10 +178,10 @@ end = struct
     | Leaf l -> (
       match l.parent with 
       | Root p -> (* create a node pointing to Root, reroute leaf to that node *)
-        let dt : data = Data.compress p Data.neutral_element new_data in (*TODO debug: compress modifies neutral_element*)
-        let new_node = Node({id=next_id(); param=p; parent=l.parent; child=leaf; data=dt}) in
+        (*let dt : data = Data.compress p Data.neutral_element new_data in TODO debug: compress modifies neutral_element*)
+        let new_node = Node({id=next_id(); param=p; parent=l.parent; child=leaf; data=new_data}) in
         update_parent_in_child leaf new_node; (* now leaf's parent is new_node *)
-        Data.size_of dt
+        Data.size_of new_data
       | Node n -> (* update n's data: compress it with new_data *)
         let deleted_size = Data.size_of n.data in
         n.data <- Data.compress n.param n.data new_data;
@@ -255,10 +254,15 @@ end = struct
       | Leaf _ -> failwith "Illegal state: a Leaf cannot be a parent."
     )
 
-  let rec get_compressed_data (t: tree): data =
+  let rec get_compressed_data (t: tree): data option =
     match t with 
-    | Root _ -> Data.neutral_element (*TODO debug here: neutral element gets modified by compress, just remove it *)
-    | Node n -> Data.compress n.param (get_compressed_data n.parent) n.data
+    | Root _ -> None
+      (*Data.neutral_element TODO debug here: neutral element gets modified by compress, just remove it *)
+    | Node n -> (
+      match (get_compressed_data n.parent) with
+      | Some dt -> Some (Data.compress n.param dt n.data)
+      | None -> Some (n.data)
+    )
     | Branch b -> get_compressed_data b.parent
     | Leaf l -> get_compressed_data l.parent
 

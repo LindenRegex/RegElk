@@ -154,24 +154,24 @@ module List_Regs =
     let to_arrays (regs:regs) : int Array.t * int Array.t =
       let a_cp = Array.make regs.size (-1) in
       let a_clk = Array.make regs.size (-1) in
-      (*let rec fill_array (l:(int*int*int) list) : unit =
+      let rec fill_array (l:(int*int*int) list) : unit =
         match l with
         | [] -> ()
         | (k,cp,clk)::l' ->
            (* only setting reg values that haven't been set yet *)
            if (a_cp.(k) = -1) then a_cp.(k) <- cp;
            if (a_clk.(k) = -1) then a_clk.(k) <- clk;
-           fill_array l' in*)
+           fill_array l' in
 
-      let rec fill_array2 (l: (int*int*int) list) : unit =
+      (*let rec fill_array2 (l: (int*int*int) list) : unit =
         match l with 
         | [] -> ()
         | (k, cp, clk) :: l' ->
           fill_array2 l'; (* fill with less recent updates first *)
           a_cp.(k) <- cp;
           a_clk.(k) <- clk in
-      fill_array2 regs.setlist;
-      (*fill_array regs.setlist;*)
+      fill_array2 regs.setlist;*)
+      fill_array regs.setlist;
       (a_cp, a_clk)
 
     let to_string (regs:regs) : string =
@@ -280,12 +280,12 @@ module Virtual_Tree_Regs =
     (* we might remove get_cp and get_clock and always convert to an array first for filtering *)
     let get_cp (regs: regs) (k: int) : int option =
       (* get deepest (most recent) such that it is defined *)
-      match (Regs_Vt.get_deepest_such_that regs.leaf (fun x -> (Regsdata2.get_cp_at x k) <> -2)) with
+      match (Regs_Vt.get_deepest_such_that regs.leaf (fun x -> (Regsdata2.get_cp_at x k) <> -1)) with
       | Some d -> opt_of_int (Regsdata2.get_cp_at d k)
       | None -> None
 
     let get_clock (regs: regs) (k: int) : int option =
-      match (Regs_Vt.get_deepest_such_that regs.leaf (fun x -> (Regsdata2.get_clk_at x k) <> -2)) with
+      match (Regs_Vt.get_deepest_such_that regs.leaf (fun x -> (Regsdata2.get_clk_at x k) <> -1)) with
       | Some d -> opt_of_int (Regsdata2.get_clk_at d k)
       | None -> None
 
@@ -298,7 +298,9 @@ module Virtual_Tree_Regs =
       space_decrement size_deleted
 
     let to_arrays (regs: regs): int Array.t * int Array.t =
-      Regsdata2.to_arrays regs.size (Regs_Vt.get_compressed_data regs.leaf)
+      match (Regs_Vt.get_compressed_data regs.leaf) with
+      | Some dt -> Regsdata2.to_arrays regs.size dt
+      | None -> (Array.make regs.size (-1), Array.make regs.size (-1))
 
     let to_string (regs: regs): string =
       Regs_Vt.to_string regs.leaf
