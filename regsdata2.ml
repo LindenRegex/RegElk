@@ -16,6 +16,8 @@ module Regsdata2 : sig
 
   val neutral_element : t
   val compress : p -> t -> t -> t
+  val copy : t -> t
+
   val to_string : t -> string
   val size_of : t -> int
   val to_arrays : int -> t -> int Array.t * int Array.t
@@ -146,6 +148,14 @@ end = struct
         Complete({a_cp=a_cp; a_clk=a_clk})
       ) else 
         Incomplete({size=size; l=(l2.l @ l1.l)})
+
+  let copy (t: t) : t =
+    match t with
+    | Complete arrays -> 
+      let a_cp = Array.init (Array.length arrays.a_cp) (fun i -> arrays.a_cp.(i)) in
+      let a_clk = Array.init (Array.length arrays.a_clk) (fun i -> arrays.a_clk.(i)) in
+      Complete({a_cp=a_cp; a_clk=a_clk})
+    | Incomplete _ -> t (* lists are immutable *)
 
   let to_arrays (size: int) (v: t) : int Array.t * int Array.t =
     match v with 

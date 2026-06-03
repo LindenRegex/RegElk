@@ -7,6 +7,7 @@ module Virtual_tree (Data : sig
   (* argument 2: oldest t value (closest to root) *)
   (* argument 3: most recent t value (closest to leaf) *)
   val compress : p -> t -> t -> t
+  val copy : t -> t
 
   val to_string : t -> string (* debugging purposes *)
   val size_of : t -> int (* benchmarking purposes *)
@@ -19,6 +20,7 @@ end) : sig
   val is_empty : tree -> bool
   val get_compressed_data : tree -> Data.t option
   val get_deepest_such_that : tree -> (Data.t -> bool) -> Data.t option
+  val get_unshared_data : tree -> Data.t option
 
   (* debugging *)
   val print : tree -> unit
@@ -53,7 +55,7 @@ end = struct
   }
   | Leaf of { (* handling point for user *) (* should know if left/right/single child ?? bad idea *)
     id : int;
-    mutable parent : tree (* mutable because copy needs to return only one element *)
+    mutable parent : tree (* mutable because split needs to return only one element *)
   }
 
   let get_id (t: tree): int = 
@@ -184,7 +186,7 @@ end = struct
         Data.size_of new_data
       | Node n -> (* update n's data: compress it with new_data *)
         let deleted_size = Data.size_of n.data in
-        n.data <- Data.compress n.param n.data new_data;
+        n.data <- Data.compress n.param n.data new_data; (* no copy needed *)
         (Data.size_of n.data) - deleted_size;
       | Branch b -> (* create a node pointing to b, reroute leaf and b to that node *)
         let new_node = Node({id=next_id(); param=b.param; parent=l.parent; child=leaf; data=new_data}) in
@@ -201,7 +203,7 @@ end = struct
   let merge_and_compress_nodes (parent : tree) (child : tree) : unit =
     match parent, child with 
     | Node n1, Node n2 -> (* compress n2's data into n1, reroute n2's child to n1 *)
-      n1.data <- Data.compress n1.param n1.data n2.data;
+      n1.data <- Data.compress n1.param n1.data n2.data; (* no copy needed *)
       update_parent_in_child n2.child parent; (* now n2's child's parent is n1 *)
       n1.child <- n2.child (* now n1's child in n2's child*)
     | _, _ -> ()
@@ -260,8 +262,8 @@ end = struct
       (*Data.neutral_element TODO debug here: neutral element gets modified by compress, just remove it *)
     | Node n -> (
       match (get_compressed_data n.parent) with
-      | Some dt -> Some (Data.compress n.param dt n.data)
-      | None -> Some (n.data)
+      | Some dt -> Some (Data.compress n.param dt (Data.copy n.data)) (* need to copy otherwise the tree contents might get modified *)
+      | None -> Some (Data.copy n.data)
     )
     | Branch b -> get_compressed_data b.parent
     | Leaf l -> get_compressed_data l.parent
@@ -270,9 +272,19 @@ end = struct
     match t with 
     | Root _ -> None
     | Node n -> 
-      if (f n.data) then Some(n.data)
+      if (f n.data) then Some n.data (* no copy : might get modified by user TODO change? returne val might be shared*)
       else get_deepest_such_that n.parent f
     | Branch b -> get_deepest_such_that b.parent f
     | Leaf l -> get_deepest_such_that l.parent f
+
+  let get_unshared_data (t: tree) : Data.t option =
+    match t with
+    | Root _ | Node _ | Branch _ -> None
+    | Leaf l -> (
+      match l.parent with
+      | Root _ -> None
+      | Node n -> Some n.data (* no copy : might get modified by user (it's the point) *)
+      | _ -> None
+    )
 
 end

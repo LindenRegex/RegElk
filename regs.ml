@@ -266,9 +266,23 @@ module Virtual_Tree_Regs =
       { leaf = Regs_Vt.empty size; size = size}
 
     let set_reg (regs:regs) (k:int) (cp:int option) (clk:int) : regs =
-      (* insert k cp and clk in tree *)
-      let size_inserted = Regs_Vt.insert regs.leaf (Regsdata2.Incomplete({size=1; l=[(k, int_of_opt cp, clk)]})) in
-      space_increment size_inserted;
+      (match (Regs_Vt.get_unshared_data regs.leaf) with
+      | Some d -> (
+        match d with
+        | Complete arrays -> (* reuse memory : directly update the array *)
+          arrays.a_cp.(k) <- int_of_opt cp;
+          arrays.a_clk.(k) <- clk
+        | Incomplete _ -> (* we must insert here *)
+          let size_inserted = Regs_Vt.insert regs.leaf (Regsdata2.Incomplete({size=1; l=[(k, int_of_opt cp, clk)]})) in
+          space_increment size_inserted
+      )
+      | None -> 
+        (* the leaf has no unshared data: must insert k cp and clk in tree *)
+        let size_inserted = Regs_Vt.insert regs.leaf (Regsdata2.Incomplete({size=1; l=[(k, int_of_opt cp, clk)]})) in
+        space_increment size_inserted
+      );
+      (*let size_inserted = Regs_Vt.insert regs.leaf (Regsdata2.Incomplete({size=1; l=[(k, int_of_opt cp, clk)]})) in
+      space_increment size_inserted;*)
       regs
 
     let clear_reg (regs:regs) (k:int) : regs = 
@@ -280,12 +294,12 @@ module Virtual_Tree_Regs =
     (* we might remove get_cp and get_clock and always convert to an array first for filtering *)
     let get_cp (regs: regs) (k: int) : int option =
       (* get deepest (most recent) such that it is defined *)
-      match (Regs_Vt.get_deepest_such_that regs.leaf (fun x -> (Regsdata2.get_cp_at x k) <> -1)) with
+      match (Regs_Vt.get_deepest_such_that regs.leaf (fun x -> (Regsdata2.get_cp_at x k) <> -2)) with
       | Some d -> opt_of_int (Regsdata2.get_cp_at d k)
       | None -> None
 
     let get_clock (regs: regs) (k: int) : int option =
-      match (Regs_Vt.get_deepest_such_that regs.leaf (fun x -> (Regsdata2.get_clk_at x k) <> -1)) with
+      match (Regs_Vt.get_deepest_such_that regs.leaf (fun x -> (Regsdata2.get_clk_at x k) <> -2)) with
       | Some d -> opt_of_int (Regsdata2.get_clk_at d k)
       | None -> None
 
