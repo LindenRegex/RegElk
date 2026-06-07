@@ -2,7 +2,7 @@
 module Virtual_tree (Data : sig
   type t
   type p
-  (*val neutral_element : t*)
+
   (* argument 1: extra parameter for compress *)
   (* argument 2: oldest t value (closest to root) *)
   (* argument 3: most recent t value (closest to leaf) *)
@@ -13,11 +13,15 @@ module Virtual_tree (Data : sig
   val size_of : t -> int (* benchmarking purposes *)
 end) : sig 
   type tree
-  val empty : Data.p -> tree
+  val empty_tree : Data.p -> tree
+  val initial_tree : Data.p -> tree
+  val is_empty : tree -> bool
+  val is_minimal_usable : tree -> bool
+
   val split : tree -> tree
   val insert : tree -> Data.t -> int
   val delete : tree -> int
-  val is_empty : tree -> bool
+
   val get_compressed_data : tree -> Data.t option
   val get_deepest_such_that : tree -> (Data.t -> bool) -> Data.t option
   val get_unshared_data : tree -> Data.t option
@@ -29,33 +33,32 @@ end) : sig
   val node_depth : tree -> int
 end = struct
 
-  let next_id =
-    let counter = ref 0 in
-    fun () ->
-      incr counter;
-      !counter
-
   type data = Data.t
 
+  (* Virtual tree type *)
   type tree = 
+  (* A tree has a unique Root, the ancestor of all other elements of the tree *)
   | Root of Data.p
+  (* Nodes contain data *)
   | Node of {
     id : int;
     param: Data.p;
-    mutable parent : tree; (* mutable so we can reroute when merging with a branch tree node *)
+    mutable parent : tree;
     mutable child : tree;
-    mutable data : data (* needs to be mutable so we can compress it *)
+    mutable data : data
   }
-  | Branch of { (* ensures binary tree with unlimited splits *)
+  (* Branches split into two subtrees and express the tree structure *)
+  | Branch of {
     id : int;
     param: Data.p;
     mutable parent : tree;
     mutable left : tree;
     mutable right : tree
   }
-  | Leaf of { (* handling point for user *) (* should know if left/right/single child ?? bad idea *)
+  (* Leaves identify a path in the tree and are the handling points of the tree *)
+  | Leaf of {
     id : int;
-    mutable parent : tree (* mutable because split needs to return only one element *)
+    mutable parent : tree
   }
 
   let get_id (t: tree): int = 
@@ -65,53 +68,35 @@ end = struct
     | Branch b -> b.id
     | Leaf l -> l.id
 
-  let equal (t1: tree) (t2: tree): bool = (get_id t1) = (get_id t2)
+  let next_id =
+    let counter = ref 1 in (* id 0 is reserved for Root *)
+    fun () ->
+      incr counter;
+      !counter
+
+  (* Returns an empty tree *)
+  let empty_tree (param: Data.p) : tree = 
+    Root(param)
+
+  (* Returns a minimal usable tree *)
+  let initial_tree (param: Data.p) : tree = 
+    Leaf({id=next_id(); parent=Root(param)})
 
   let is_empty (t: tree): bool =
     match t with 
-    | Root _ -> invalid_arg "t cannot be Root"
-    | Node _ | Branch _ -> false
+    | Root _ -> true
+    | Node _ | Branch _ | Leaf _ -> false
+
+  let is_minimal_usable (t: tree): bool =
+    match t with 
+    | Root _ | Node _ | Branch _ -> false
     | Leaf l ->
       match l.parent with 
       | Root _ -> true
       | _ -> false
 
-  let rec print (t: tree): unit =
-    match t with 
-    | Root _ -> Printf.printf "Root\n"
-    | Node n -> 
-      Printf.printf "Node %d (%s) -> " n.id (Data.to_string n.data);
-      print n.parent
-    | Branch b -> 
-      Printf.printf "Branch %d -> " b.id;
-      print b.parent
-    | Leaf l -> 
-      Printf.printf "Leaf %d -> " l.id; 
-      print l.parent
-
-  let rec to_string (t: tree): string =
-    match t with 
-    | Root _ -> "Root"
-    | Node n -> (Printf.sprintf "Node %d (%s) -> " n.id (Data.to_string n.data)) ^ (to_string n.parent)
-    | Branch b -> (Printf.sprintf "Branch %d -> " b.id) ^ (to_string b.parent)
-    | Leaf l -> (Printf.sprintf "Leaf %d -> " l.id) ^ (to_string l.parent)
-
-  let empty (param: Data.p) : tree = 
-    Leaf({id=next_id(); parent=Root(param)})
-
-  let rec depth (t: tree) : int =
-    match t with 
-    | Root _ -> 0
-    | Node n -> 1 + depth n.parent
-    | Branch b -> 1 + depth b.parent
-    | Leaf l -> depth l.parent
-
-  let rec node_depth (t: tree) : int =
-    match t with 
-    | Root _ -> 0
-    | Node n -> 1 + node_depth n.parent
-    | Branch b -> node_depth b.parent
-    | Leaf l -> node_depth l.parent
+  (* Two tree elements are equal is they have the same id *)
+  let equal (t1: tree) (t2: tree): bool = (get_id t1) = (get_id t2)
 
   let is_leaf (t : tree) : bool =
     match t with 
@@ -139,7 +124,7 @@ end = struct
 
   let get_data (t: tree) : Data.t =
     match t with
-    | Root p -> invalid_arg "Root does not store data"
+    | Root p -> invalid_arg "The Root does not store data"
     | Node n -> n.data
     | Branch b -> invalid_arg "Branches do not store data"
     | Leaf _ -> invalid_arg "Leaves do not store data"
@@ -163,59 +148,73 @@ end = struct
       else ()
     | Leaf l -> failwith "Illegal state: a Leaf cannot be a parent."
 
+  (* Splits a leaf into two subtrees
+  ** Replaces the leaf with a branch whose children are the input leaf and a new leaf
+  ** Throws [Invalid_argument] if the input tree is not a Leaf
+  ** Throws [Failure] if the tree is in an illegal state *)
   let split (leaf : tree) : tree = 
     match leaf with 
-    | Root _ | Node _ | Branch _  -> invalid_arg "leaf must be a Leaf."
+    | Root _ | Node _ | Branch _  -> invalid_arg "The argument tree must be a Leaf."
     | Leaf l -> 
       let new_leaf = Leaf({id=next_id(); parent=l.parent}) in
       let b = Branch({id=next_id(); param=(get_param l.parent); parent=l.parent; left=leaf; right=new_leaf}) in
       update_child_in_parent leaf b; (* now leaf's parent's child is b *)
       update_parent_in_child new_leaf b; (* now new_leaf's parent is b*)
-      l.parent <- b;
+      l.parent <- b; (* now leaf's parent is b *)
       new_leaf
 
+  (* Inserts some new data into the tree for a leaf 
+  ** Compresses the new data with existing data if possible
+  ** Throws [Invalid_argument] if the input tree is not a Leaf
+  ** Throws [Failure] if the tree is in an illegal state *)
   let insert (leaf : tree) (new_data : data) : int =
     match leaf with 
-    | Root _ | Node _ | Branch _ -> invalid_arg "leaf must be a Leaf."
+    | Root _ | Node _ | Branch _ -> invalid_arg "The argument tree must be a Leaf."
     | Leaf l -> (
       match l.parent with 
       | Root p -> (* create a node pointing to Root, reroute leaf to that node *)
-        (*let dt : data = Data.compress p Data.neutral_element new_data in TODO debug: compress modifies neutral_element*)
         let new_node = Node({id=next_id(); param=p; parent=l.parent; child=leaf; data=new_data}) in
-        update_parent_in_child leaf new_node; (* now leaf's parent is new_node *)
+        l.parent <- new_node; (* now leaf's parent is new_node *)
         Data.size_of new_data
       | Node n -> (* update n's data: compress it with new_data *)
         let deleted_size = Data.size_of n.data in
-        n.data <- Data.compress n.param n.data new_data; (* no copy needed *)
+        n.data <- Data.compress n.param n.data new_data; (* no need to copy data: reusing memory *)
         (Data.size_of n.data) - deleted_size;
       | Branch b -> (* create a node pointing to b, reroute leaf and b to that node *)
         let new_node = Node({id=next_id(); param=b.param; parent=l.parent; child=leaf; data=new_data}) in
         update_child_in_parent leaf new_node; (* now leaf's parent's child is new_node *)
-        update_parent_in_child leaf new_node; (* now leaf's parent is new_node *)
+        l.parent <- new_node; (* now leaf's parent is new_node *)
         Data.size_of new_data
       | Leaf _ -> failwith "Illegal state: a Leaf cannot be a parent."
     )
 
-  (* 
-    Compress child and parent into one node 
-    The parent becomes the new node
-  *)
-  let merge_and_compress_nodes (parent : tree) (child : tree) : unit =
-    match parent, child with 
-    | Node n1, Node n2 -> (* compress n2's data into n1, reroute n2's child to n1 *)
-      n1.data <- Data.compress n1.param n1.data n2.data; (* no copy needed *)
-      update_parent_in_child n2.child parent; (* now n2's child's parent is n1 *)
+  (* Compress two Nodes into one by compressing their data and modifying the tree structure
+  ** Used when the input Nodes are separated by a Branch to be deleted
+  ** n_old is closer to the Root, n_new is closer to the leaves
+  ** Modifies and returns the n_old *)
+  let merge_and_compress_nodes (n_old : tree) (n_new : tree) : unit =
+    match n_old, n_new with 
+    | Node n1, Node n2 ->
+      n1.data <- Data.compress n1.param n1.data n2.data; (* no need to copy data: reusing memory *)
+      update_parent_in_child n2.child n_old; (* now n2's child's parent is n1 *)
       n1.child <- n2.child (* now n1's child in n2's child*)
     | _, _ -> ()
 
+  (* Delete to_del subtree and branch from the tree.
+  ** to_del must be a subtree of branch.
+  ** Branch is replaced by its other child.
+  ** Throws [Invalid_argument] if to_del is not a child of branch *)
   let delete_from_branch (to_del : tree) (branch : tree) : int =
     match branch with 
-    | Root _ | Node _ -> invalid_arg "branch must be a Branch."
+    | Root _ | Node _ -> 0
     | Branch b -> 
       let size_deleted = ref 0 in
-      let other_child = if (equal b.left to_del) then b.right else if (equal b.right to_del) then b.left 
-                  else invalid_arg "Argument to_del is not a child of branch."
-                in
+      let other_child = if (equal b.left to_del) 
+                        then b.right 
+                        else  if (equal b.right to_del) 
+                              then b.left 
+                              else invalid_arg "Argument to_del is not a child of branch."
+        in
       if is_node other_child && is_node b.parent then ((* must merge the two nodes and compress their data *)
         size_deleted := (Data.size_of (get_data other_child)) + (Data.size_of (get_data b.parent));
         merge_and_compress_nodes b.parent other_child;
@@ -225,66 +224,120 @@ end = struct
         update_parent_in_child other_child b.parent (* now other_child's parent is b.parent*)
       );
       !size_deleted
-    | Leaf _ -> invalid_arg "branch must be a Branch."
+    | Leaf _ -> 0
 
-  (* deletes all parents until it gets to a Branch *)
-  (* if that Branch's parent is a node, compress node's data with branch's other child *)
-  (* if there is no branch in the tree, to_delete becomes the empty tree *)
-  let rec delete (to_delete : tree) : int =
-    match to_delete with 
-    | Root _ -> 0
-    | Node n -> (
-      match n.parent with
-      | Root _ -> (* make child (leaf) point to root *)
-        update_parent_in_child n.child n.parent;
-        Data.size_of n.data
-      | Node n -> (* Impossible: to_delete and its parent (a Node) should be compressed into one Node *)
-        failwith "Illegal state: A Node's parent cannot be a Node." 
-      | Branch b ->
-        let deleted_from_compression = delete_from_branch to_delete n.parent in
-        deleted_from_compression + (Data.size_of n.data)
-      | Leaf _ -> failwith "Illegal state: a Leaf cannot be a parent."
-    )
-    | Branch _ -> 0 (* branches cannot be deleted, must delete its children separately *)
+  (* Deletes the stem for the input leaf.
+  ** Deletes the leaf itself and its ancestors until the first Branch, which is replaced by its other child.
+  ** If the leaf has no Branch ancestor, only the data is deleted (the Node ancestor) and the tree becomes minimal.
+  ** Deleting might trigger a compression higher in the tree.
+  ** Throws [Invalid_argument] if the input tree is not a Leaf.
+  ** Throws [Failure] if the tree is in an illegal state. *)
+  let delete (leaf: tree) : int =
+    match leaf with
+    | Root _ | Node _ | Branch _ -> invalid_arg "The argument tree must be a Leaf."
     | Leaf l -> (
-      match l.parent with
-      | Root _ -> 0
-      | Node n -> (* Delete the node recursively. The node parent is either Root or a Branch *)
-        delete l.parent
-      | Branch b -> (* Replace the branch with its other child. Compress if possible. *)
-        delete_from_branch to_delete l.parent
+      match l.parent with 
+      | Root _ -> 0 (* the tree stays unchanged in this case *)
+      | Node n -> (
+        match n.parent with 
+        | Root _ -> (* delete only the data: make leaf point to Root *)
+          l.parent <- n.parent;
+          Data.size_of n.data
+        | Node n -> failwith "Illegal state: A Node's parent cannot be a Node." 
+        | Branch b -> (* Replace the Branch with its other child. Compress if possible. *)
+          let deleted_from_compression = delete_from_branch l.parent n.parent in
+          deleted_from_compression + (Data.size_of n.data)
+        | Leaf _ -> failwith "Illegal state: a Leaf cannot be a parent."
+      )
+      | Branch b -> (* Replace the Branch with its other child. Compress if possible. *)
+        delete_from_branch leaf l.parent
       | Leaf _ -> failwith "Illegal state: a Leaf cannot be a parent."
     )
 
-  let rec get_compressed_data (t: tree): data option =
-    match t with 
-    | Root _ -> None
-      (*Data.neutral_element TODO debug here: neutral element gets modified by compress, just remove it *)
-    | Node n -> (
-      match (get_compressed_data n.parent) with
-      | Some dt -> Some (Data.compress n.param dt (Data.copy n.data)) (* need to copy otherwise the tree contents might get modified *)
-      | None -> Some (Data.copy n.data)
-    )
-    | Branch b -> get_compressed_data b.parent
-    | Leaf l -> get_compressed_data l.parent
+  (* Returns the data for the input leaf 
+  ** The data for a leaf is the compresson of the data of all of its ancestors from the Root to the leaf itself
+  ** Returns None if none the leaf's ancestors are Nodes
+  ** This operation does not modify the tree
+  ** Throws [Invalid_argument] if the input tree is not a Leaf. *)
+  let get_compressed_data (leaf: tree): data option =
+    match leaf with
+    | Root _ | Node _ | Branch _ -> invalid_arg "The argument tree must be a Leaf."
+    | Leaf _ -> 
+      let rec get_rec (t: tree): data option =
+        match t with 
+        | Root _ -> None
+        | Node n -> (
+          match (get_rec n.parent) with
+          (* the data must be copied otherwise it might get modified by the compression operation *)
+          | Some dt -> Some (Data.compress n.param dt (Data.copy n.data))
+          | None -> Some (Data.copy n.data)
+        )
+        | Branch b -> get_rec b.parent
+        | Leaf l -> get_rec l.parent 
+      in
+      get_rec leaf
 
-  let rec get_deepest_such_that (t: tree) (f: Data.t -> bool): Data.t option =
-    match t with 
-    | Root _ -> None
-    | Node n -> 
-      if (f n.data) then Some n.data (* no copy : might get modified by user TODO change? returne val might be shared*)
-      else get_deepest_such_that n.parent f
-    | Branch b -> get_deepest_such_that b.parent f
-    | Leaf l -> get_deepest_such_that l.parent f
+  (* Returns the data of the first ancestor of the input leaf satisfying the condition f, if it exists.
+  ** Throws [Invalid_argument] if the input tree is not a Leaf. *)
+  let get_deepest_such_that (leaf: tree) (f: Data.t -> bool): Data.t option =
+    match leaf with
+    | Root _ | Node _ | Branch _ -> invalid_arg "The argument tree must be a Leaf."
+    | Leaf _ ->
+      let rec get_rec (t: tree) (f: Data.t -> bool): Data.t option =
+        match t with 
+        | Root _ -> None
+        | Node n -> 
+          if (f n.data) then Some n.data (* no copy : might get modified by user *)
+          else get_rec n.parent f
+        | Branch b -> get_rec b.parent f
+        | Leaf l -> get_rec l.parent f
+      in 
+      get_rec leaf f
 
-  let get_unshared_data (t: tree) : Data.t option =
-    match t with
-    | Root _ | Node _ | Branch _ -> None
+  (* Returns the data for the input leaf that is shared with no other leaf, if it exists.
+  ** Throws [Invalid_argument] if the input tree is not a Leaf. *)
+  let get_unshared_data (leaf: tree) : Data.t option =
+    match leaf with
+    | Root _ | Node _ | Branch _ -> invalid_arg "The argument tree must be a Leaf."
     | Leaf l -> (
       match l.parent with
       | Root _ -> None
-      | Node n -> Some n.data (* no copy : might get modified by user (it's the point) *)
+      | Node n -> Some n.data (* no copy : might get modified by user *)
       | _ -> None
     )
+
+  let rec print (t: tree): unit =
+    match t with 
+    | Root _ -> Printf.printf "Root\n"
+    | Node n -> 
+      Printf.printf "Node %d (%s) -> " n.id (Data.to_string n.data);
+      print n.parent
+    | Branch b -> 
+      Printf.printf "Branch %d -> " b.id;
+      print b.parent
+    | Leaf l -> 
+      Printf.printf "Leaf %d -> " l.id; 
+      print l.parent
+
+  let rec to_string (t: tree): string =
+    match t with 
+    | Root _ -> "Root"
+    | Node n -> (Printf.sprintf "Node %d (%s) -> " n.id (Data.to_string n.data)) ^ (to_string n.parent)
+    | Branch b -> (Printf.sprintf "Branch %d -> " b.id) ^ (to_string b.parent)
+    | Leaf l -> (Printf.sprintf "Leaf %d -> " l.id) ^ (to_string l.parent)
+
+  let rec depth (t: tree) : int =
+    match t with 
+    | Root _ -> 0
+    | Node n -> 1 + depth n.parent
+    | Branch b -> 1 + depth b.parent
+    | Leaf l -> depth l.parent
+
+  let rec node_depth (t: tree) : int =
+    match t with 
+    | Root _ -> 0
+    | Node n -> 1 + node_depth n.parent
+    | Branch b -> node_depth b.parent
+    | Leaf l -> node_depth l.parent
 
 end
