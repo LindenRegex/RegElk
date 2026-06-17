@@ -7,9 +7,13 @@ open Cdn
 open Tojs
 open Toexp
 open Charclasses
-open Flags
+open Vdflags
 open Regs
 open Spacebench
+
+(*open Core*)
+open Core_bench
+open Command_unix
 
 module INTARRAY = Interpreter(Regs.Array_Regs) 
 module INTLIST = Interpreter(Regs.List_Regs) 
@@ -34,7 +38,7 @@ let get_build_capture (s:string) =
   else if (s = "VirtualTreeRegs") then INTVIRTUALTREE.build_capture
   else INTLIST.build_capture
 
-let get_engine_from_name (s:string) : string =
+let get_impl_from_name (s:string) : string =
   match String.index_opt s '_' with
   | Some i -> String.sub s 0 i
   | None -> s
@@ -67,12 +71,11 @@ let main =
   (* disabling debug/verbose output *)
   debug := false;
   verbose := false;
-  
-  let regex = Sys.argv.(1) in
-  let string = Sys.argv.(2) in
-  (*let warmups = int_of_string(Sys.argv.(3)) in
-  let repetitions = int_of_string(Sys.argv.(4)) in*)
-  let reg_implem = get_engine_from_name Sys.argv.(5) in
+
+  let argv = Sys.argv in
+  let regex = argv.(1) in
+  let string = argv.(2) in
+  let reg_implem = get_impl_from_name argv.(5) in
 
   (*let matcher = get_matcher reg_implem in*)
   let build_oracle = get_build_oracle reg_implem in
@@ -85,28 +88,34 @@ let main =
   (* compiling the regex *)
   let compiled_regex = full_compilation annotated_regex in
 
-  (* Warmup *)
-  (* this shouldn't change anything for this engine *)
-  (* but we do it anyway to mirror our evaluation of the V8Linear engine *)
-  (*for i=0 to (warmups-1) do
-    ignore(matcher compiled_regex string)
-  done;*)
-
   (* triggering garbage collector *)
   Gc.full_major();
 
-  (* measuring matches *)
-  (*let tstart = Timer.now() in*)
-  (* get max_space for each run and sum them all *)
-  (*for i = 0 to (repetitions - 1) do*) (*deterministic when using spacebench*)
-  max_space := 0;
+  (* Using Jane Street's core bench *)
+
+  (* Set the command line arguments to column names so core bench does not complain *)
+  argv.(1) <- "time";
+  argv.(2) <- "alloc";
+  argv.(3) <- "gc";
+  argv.(4) <- "percentage";
+  argv.(5) <- "samples";
+
+  let cmd = Bench.make_command [
+      Bench.Test.create ~name:"Matcher"
+        (fun () -> 
+          let o = build_oracle compiled_regex string in
+          ignore(build_capture compiled_regex string o)
+        )
+    ] in
+
+  Command_unix.run cmd
+
+  (* Using a counter *)
+
+  (*max_space := 0;
   current_space := 0;
+
   let o = build_oracle compiled_regex string in
   ignore(build_capture compiled_regex string o);
-  (*done;*)
-  (*let time = Timer.elapsed tstart in*)
-  
-  Printf.printf ("%i\n") ((Gc.stat()).top_heap_words)
 
-  (*Printf.printf ("%i\n") !max_space*)
- 
+  Printf.printf ("%i\n") !max_space*)

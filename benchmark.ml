@@ -9,9 +9,10 @@ open Interpreter
 open Sys
 open Unix
 open Gc
-open Flags
+open Vdflags
 open Arg
 open Benchmark_vectors
+open Spacebench
 
 (* path to V8 executable *)
 (* this V8 executable needs to be patched in two ways: *)
@@ -86,9 +87,50 @@ let get_space_ocaml (bin: string) (r:raw_regex) (str:string) (impl:string): stri
   let sys = bin ^ " " ^ regex_string ^ input_string ^ string_of_int !warmups ^ " " ^ string_of_int !repetitions ^ " " ^ impl in
   string_of_command(sys)
 
+(* Available as find_index in Stdlib since 5.1, but only 5.0 is required *)
+let find_such_that f lst =
+  let rec find f lst idx =
+    match lst with
+    | [] -> None
+    | hd :: tl -> if f hd then Some idx else find f tl (idx+1) in
+  find f lst 0
+
+let split_on_string sep s =
+  let slen = String.length s in
+  let seplen = String.length sep in
+
+  let rec find_from i res : int option =
+    if res + seplen > slen then None
+    else
+      let rec sep_at si : bool =
+        if si = seplen then true
+        else if s.[res + si] <> sep.[si] then false
+        else sep_at (si + 1) in
+      if sep_at 0 then Some res
+      else find_from i (res + 1)
+  in
+
+  let rec loop acc i =
+    match find_from i i with
+    | None -> List.rev (String.sub s i (slen - i) :: acc)
+    | Some j -> loop (String.sub s i (j - i) :: acc) (j + seplen)
+  in
+
+  loop [] 0
+
+let extract_val (jsout : string) (colname: string) : string =
+  let lines = String.split_on_char '\n' jsout in
+  let colstring = List.nth lines 2 in
+  let valstring = List.nth lines 4 in
+  let cols = List.map (fun c -> String.trim c) (split_on_string "\u{2502}" colstring) in
+  let vals = List.map (fun c -> String.trim c) (split_on_string "\u{2502}" valstring) in
+  match find_such_that (fun s -> s = colname) cols with
+  | Some colnb -> List.nth vals colnb
+  | None -> jsout
+
 let get_space (e:engine) (r:raw_regex) (str:string) (impl:string): string =
   match e with
-  | OCaml -> get_space_ocaml "./matcher_space.native" r str impl
+  | OCaml -> (extract_val (get_space_ocaml "./matcher_space.native" r str impl) "mjWd/Run") ^ "\n"
   | OCamlBench -> failwith "TODO"
   | OldV8Linear -> failwith "TODO"
   | NewV8Linear -> failwith "TODO"
