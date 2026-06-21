@@ -10,7 +10,6 @@
 
 open Array
 open Map
-open Spacebench
 
 
 module IntMap = Map.Make(struct type t = int let compare = compare end)
@@ -52,7 +51,6 @@ module Array_Regs =
 
     (* O(r) *)
     let init_regs (size:int) : regs =
-      space_increment size;
       { a_cp = Array.make size (-1); a_clk = Array.make size (-1)}
 
     (* O(1) *)
@@ -79,12 +77,10 @@ module Array_Regs =
 
     (* O(r) *)
     let copy (regs:regs) : regs =
-      space_increment (Array.length regs.a_cp);
       { a_cp = Array.copy regs.a_cp; a_clk = Array.copy regs.a_clk }
 
     (* O(1) *)
-    let delete (regs:regs) : unit = 
-      space_decrement (Array.length regs.a_cp)
+    let delete (regs:regs) : unit = ()
 
     (* O(1) *)
     let to_arrays (regs:regs) : int Array.t * int Array.t =
