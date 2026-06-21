@@ -215,23 +215,84 @@ let nested_lb : regex_benchmark =
 (* Later I'll make the interpreter a functor to switch dynamically, here you need to recompile each time. *)
 (* we'll compare the results of each register data_structure (ds) *)
 
-let rec ds_reg = fun reg_size ->
+(* Time as a function of the regex size *)
+
+let ds_conf =
+  [{eng=OCaml; min_size=0; max_size=500; qua=Time}]
+
+let ds_str = String.make 4000 'a'
+
+(* A) r = (?:(a)?...(a)?)* *)
+
+let rec ds_reg_tra = fun reg_size ->
   match reg_size with
   | 0 -> raw_qmark(Raw_capture(raw_char('a')))
-  | _ -> Raw_con(raw_qmark(Raw_capture(raw_char('a'))),ds_reg (reg_size - 1))
+  | _ -> Raw_con(raw_qmark(Raw_capture(raw_char('a'))), ds_reg_tra (reg_size - 1))
 
-let ds_param_reg = fun reg_size ->
-  raw_star(ds_reg reg_size)
+let ds_param_reg_tra = fun reg_size ->
+  raw_star(ds_reg_tra reg_size)
 
-let rec make_con = fun size ->
-  match size with
-  | 0 -> Raw_capture(raw_char('a'))
-  | _ -> Raw_con(Raw_capture(raw_char('a')), make_con(size-1))
+let dsarray_tra : regex_benchmark =
+  { name = Array_Regs.name ^ "_TRA";
+    (* for array_regs, you can stop at ~200 or it really becomes long *)
+    confs = [{ (List.hd ds_conf) with max_size=200 }];
+    param_regex = ds_param_reg_tra;
+    input_str = ds_str }
 
-let rec ds_reg2 = fun reg_size size ->
+let dslist_tra : regex_benchmark =
+  { name = List_Regs.name ^ "_TRA";
+    confs = ds_conf;
+    param_regex = ds_param_reg_tra;
+    input_str = ds_str }
+
+let dstree_tra : regex_benchmark =
+  { name = Map_Regs.name ^ "_TRA";
+    confs = ds_conf;
+    param_regex = ds_param_reg_tra;
+    input_str = ds_str }
+
+let dsvirtualtree_tra : regex_benchmark =
+  { name = Virtual_Tree_Regs.name ^ "_TRA";
+    confs = ds_conf;
+    param_regex = ds_param_reg_tra;
+    input_str = ds_str }
+
+(* B) r = ^ (?:(a)...(a){2})* *)
+
+let rec ds_reg_trb = fun reg_size ->
   match reg_size with
-  | 0 -> make_con size
-  | _ -> Raw_alt(ds_reg2 (reg_size - 1) size, ds_reg2 (reg_size - 1) size)
+  | 0 -> Raw_count({min=2;max=Some 2;greedy=true}, Raw_capture(raw_char('a')))
+  | _ -> Raw_con(Raw_capture(raw_char('a')), ds_reg_trb (reg_size - 1))
+
+let ds_param_reg_trb = fun reg_size ->
+  Raw_con(Raw_anchor(BeginInput), raw_star(ds_reg_trb reg_size))
+
+let dsarray_trb : regex_benchmark =
+  { name = Array_Regs.name ^ "_TRB";
+    (* for array_regs, you can stop at ~200 or it really becomes long *)
+    confs = [{ (List.hd ds_conf) with max_size=200 }];
+    param_regex = ds_param_reg_trb;
+    input_str = ds_str }
+
+let dslist_trb : regex_benchmark =
+  { name = List_Regs.name ^ "_TRB";
+    confs = [{ (List.hd ds_conf) with max_size=650 }];
+    param_regex = ds_param_reg_trb;
+    input_str = ds_str }
+
+let dstree_trb : regex_benchmark =
+  { name = Map_Regs.name ^ "_TRB";
+    confs = [{ (List.hd ds_conf) with max_size=650 }];
+    param_regex = ds_param_reg_trb;
+    input_str = ds_str }
+
+let dsvirtualtree_trb : regex_benchmark =
+  { name = Virtual_Tree_Regs.name ^ "_TRB";
+    confs = [{ (List.hd ds_conf) with max_size=650 }];
+    param_regex = ds_param_reg_trb;
+    input_str = ds_str }
+
+(* Measuring space *)
 
 let rec first_part = fun size ->
   match size with
@@ -241,82 +302,87 @@ let rec first_part = fun size ->
 let rec second_part = fun size ->
   match size with
   | 0 -> Raw_capture(raw_char('a'))
-  | _ -> Raw_con(Raw_capture(raw_char('a')), (second_part(size - 1)))
+  | _ -> Raw_con(Raw_capture(raw_char('a')), second_part(size - 1))
 
-let ds_param_reg3 = fun size -> Raw_con(first_part size, Raw_con(second_part size, raw_star(Raw_capture(raw_char('a')))))
+let ds_param_reg_s = fun size -> 
+  Raw_con(Raw_con(Raw_anchor(BeginInput), first_part size), 
+    Raw_con(second_part size, Raw_count({min=4000;max=Some 4000;greedy=true}, Raw_capture(raw_char('a')))))
 
-let ds_param_reg2 = fun reg_size ->
-  raw_star(ds_reg2 reg_size reg_size)
+(* Space as a function of the input string size *)
+(* C) ^ a?...a? (a)...(a) (a){4000} *)
 
-let ds_str = String.make 10000 'a'
+let ds_conf_ss =
+  [{eng=OCaml; min_size=0; max_size=750; qua=Space}]
 
-let ds_reg = raw_star(ds_reg 200)
+let ds_param_str_ss = fun str_size -> String.make str_size 'a'
 
-let ds_param_str = fun str_size -> String.make str_size 'a'
+let ds_param_reg_ssc = ds_param_reg_s 20
 
-let ds_conf =
-  [{eng=OCaml; min_size=0; max_size=300; qua=Space}]
-
-let ds_conf_space_s =
-  [{eng=OCaml; min_size=0; max_size=10000; qua=Space}]
-
-let dsarray : regex_benchmark =
-  { name = Array_Regs.name;
+let dsarray_ssc : string_benchmark =
+  { name = Array_Regs.name ^ "_SSC";
     (* for array_regs, you can stop at ~200 or it really becomes long *)
-    confs = [{ (List.hd ds_conf) with max_size=200 }];
-    param_regex = ds_param_reg;
-    input_str = ds_str }
+    confs = ds_conf_ss;
+    param_str = ds_param_str_ss;
+    rgx = ds_param_reg_ssc }
 
-let dslist : regex_benchmark =
-  { name = List_Regs.name;
-    confs = ds_conf;
-    param_regex = ds_param_reg3;
-    input_str = ds_str }
+let dslist_ssc : string_benchmark =
+  { name = List_Regs.name ^ "_SSC";
+    confs = ds_conf_ss;
+    param_str = ds_param_str_ss;
+    rgx = ds_param_reg_ssc }
 
-let dstree : regex_benchmark =
-  { name = Map_Regs.name;
-    confs = ds_conf;
-    param_regex = ds_param_reg;
-    input_str = ds_str }
+let dstree_ssc : string_benchmark =
+  { name = Map_Regs.name ^ "_SSC";
+    confs = ds_conf_ss;
+    param_str = ds_param_str_ss;
+    rgx = ds_param_reg_ssc }
 
-let dsvirtualtree : regex_benchmark =
-  { name = Virtual_Tree_Regs.name;
-    confs = ds_conf;
-    param_regex = ds_param_reg3;
-    input_str = ds_str }
+let dsvirtualtree_ssc : string_benchmark =
+  { name = Virtual_Tree_Regs.name ^ "_SSC";
+    confs = ds_conf_ss;
+    param_str = ds_param_str_ss;
+    rgx = ds_param_reg_ssc }
 
-let dsarray_s : string_benchmark =
-  { name = Array_Regs.name ^ "_Space_s";
+(* Space as a function of the regex size *)
+(* D) ^ a?...a? (a)...(a) (a){4000} *)
+
+let ds_conf_sr =
+  [{eng=OCaml; min_size=0; max_size=500; qua=Space}]
+
+let dsarray_srd : regex_benchmark =
+  { name = Array_Regs.name ^ "_SRD";
     (* for array_regs, you can stop at ~200 or it really becomes long *)
-    confs = ds_conf_space_s;
-    param_str = ds_param_str;
-    rgx = ds_reg }
+    confs = [{ (List.hd ds_conf_sr) with max_size=200 }];
+    param_regex = ds_param_reg_s;
+    input_str = ds_str }
 
-let dslist_s : string_benchmark =
-  { name = List_Regs.name ^ "_Space_s";
-    confs = ds_conf_space_s;
-    param_str = ds_param_str;
-    rgx = ds_reg }
+let dslist_srd : regex_benchmark =
+  { name = List_Regs.name ^ "_SRD";
+    confs = ds_conf_sr;
+    param_regex = ds_param_reg_s;
+    input_str = ds_str }
 
-let dstree_s : string_benchmark =
-  { name = Map_Regs.name ^ "_Space_s";
-    confs = ds_conf_space_s;
-    param_str = ds_param_str;
-    rgx = ds_reg }
+let dstree_srd : regex_benchmark =
+  { name = Map_Regs.name ^ "_SRD";
+    confs = ds_conf_sr;
+    param_regex = ds_param_reg_s;
+    input_str = ds_str }
 
-let dsvirtualtree_s : string_benchmark =
-  { name = Virtual_Tree_Regs.name ^ "_Space_s";
-    confs = ds_conf_space_s;
-    param_str = ds_param_str;
-    rgx = ds_reg }
+let dsvirtualtree_srd : regex_benchmark =
+  { name = Virtual_Tree_Regs.name ^ "_SRD";
+    confs = ds_conf_sr;
+    param_regex = ds_param_reg_s;
+    input_str = ds_str }
 
 
 let all_bench : benchmark list =
   [RB nested_nn_plus; RB nested_cdn; RB clocks;
    RB nested_lookarounds; SB nested_lookarounds_string;
    RB nested_lb; SB nested_lookbehinds_string;
-   RB dsarray; RB dslist; RB dstree; RB dsvirtualtree;
-   SB dsarray_s; SB dslist_s; SB dstree_s; SB dsvirtualtree_s]
+   RB dsarray_tra; RB dslist_tra; RB dstree_tra; RB dsvirtualtree_tra;
+   RB dsarray_trb; RB dslist_trb; RB dstree_trb; RB dsvirtualtree_trb;
+   SB dsarray_ssc; SB dslist_ssc; SB dstree_ssc; SB dsvirtualtree_ssc;
+   RB dsarray_srd; RB dslist_srd; RB dstree_srd; RB dsvirtualtree_srd]
 
 let bench_names = List.map (fun b -> bench_name b) all_bench
 let bench_names_string =
