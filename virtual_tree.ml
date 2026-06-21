@@ -1,5 +1,5 @@
 
-module Virtual_tree (Data : sig
+module Virtual_tree (CData : sig
   type t
   type p
 
@@ -10,21 +10,20 @@ module Virtual_tree (Data : sig
   val copy : t -> t
 
   val to_string : t -> string (* debugging purposes *)
-  val size_of : t -> int (* benchmarking purposes *)
 end) : sig 
   type tree
-  val empty_tree : Data.p -> tree
-  val initial_tree : Data.p -> tree
+  val empty_tree : CData.p -> tree
+  val initial_tree : CData.p -> tree
   val is_empty : tree -> bool
   val is_minimal_usable : tree -> bool
 
   val split : tree -> tree
-  val insert : tree -> Data.t -> int
-  val delete : tree -> int
+  val insert : tree -> CData.t -> unit
+  val delete : tree -> unit
 
-  val get_compressed_data : tree -> Data.t option
-  val get_deepest_such_that : tree -> (Data.t -> bool) -> Data.t option
-  val get_unshared_data : tree -> Data.t option
+  val get_compressed_data : tree -> CData.t option
+  val get_deepest_such_that : tree -> (CData.t -> bool) -> CData.t option
+  val get_unshared_data : tree -> CData.t option
 
   (* debugging *)
   val print : tree -> unit
@@ -33,24 +32,22 @@ end) : sig
   val node_depth : tree -> int
 end = struct
 
-  type data = Data.t
-
   (* Virtual tree type *)
   type tree = 
   (* A tree has a unique Root, the ancestor of all other elements of the tree *)
-  | Root of Data.p
+  | Root of CData.p
   (* Nodes contain data *)
   | Node of {
     id : int;
-    param: Data.p;
+    param: CData.p;
     mutable parent : tree;
     mutable child : tree;
-    mutable data : data
+    mutable data : CData.t
   }
   (* Branches split into two subtrees and express the tree structure *)
   | Branch of {
     id : int;
-    param: Data.p;
+    param: CData.p;
     mutable parent : tree;
     mutable left : tree;
     mutable right : tree
@@ -75,11 +72,11 @@ end = struct
       !counter
 
   (* Returns an empty tree *)
-  let empty_tree (param: Data.p) : tree = 
+  let empty_tree (param: CData.p) : tree = 
     Root(param)
 
   (* Returns a minimal usable tree *)
-  let initial_tree (param: Data.p) : tree = 
+  let initial_tree (param: CData.p) : tree = 
     Leaf({id=next_id(); parent=Root(param)})
 
   let is_empty (t: tree): bool =
@@ -115,14 +112,14 @@ end = struct
     | Branch b -> b.parent
     | Leaf l -> l.parent
 
-  let get_param (t: tree) : Data.p =
+  let get_param (t: tree) : CData.p =
     match t with
     | Root p -> p 
     | Node n -> n.param 
     | Branch b -> b.param 
     | Leaf _ -> invalid_arg "Leaves do not know the Data parameter"
 
-  let get_data (t: tree) : Data.t =
+  let get_data (t: tree) : CData.t =
     match t with
     | Root p -> invalid_arg "The Root does not store data"
     | Node n -> n.data
@@ -167,24 +164,20 @@ end = struct
   ** Compresses the new data with existing data if possible
   ** Throws [Invalid_argument] if the input tree is not a Leaf
   ** Throws [Failure] if the tree is in an illegal state *)
-  let insert (leaf : tree) (new_data : data) : int =
+  let insert (leaf : tree) (new_data : CData.t) : unit =
     match leaf with 
     | Root _ | Node _ | Branch _ -> invalid_arg "The argument tree must be a Leaf."
     | Leaf l -> (
       match l.parent with 
       | Root p -> (* create a node pointing to Root, reroute leaf to that node *)
         let new_node = Node({id=next_id(); param=p; parent=l.parent; child=leaf; data=new_data}) in
-        l.parent <- new_node; (* now leaf's parent is new_node *)
-        Data.size_of new_data
+        l.parent <- new_node (* now leaf's parent is new_node *)
       | Node n -> (* update n's data: compress it with new_data *)
-        let deleted_size = Data.size_of n.data in
-        n.data <- Data.compress n.param n.data new_data; (* no need to copy data: reusing memory *)
-        (Data.size_of n.data) - deleted_size;
+        n.data <- CData.compress n.param n.data new_data (* no need to copy data: reusing memory *)
       | Branch b -> (* create a node pointing to b, reroute leaf and b to that node *)
         let new_node = Node({id=next_id(); param=b.param; parent=l.parent; child=leaf; data=new_data}) in
         update_child_in_parent leaf new_node; (* now leaf's parent's child is new_node *)
-        l.parent <- new_node; (* now leaf's parent is new_node *)
-        Data.size_of new_data
+        l.parent <- new_node (* now leaf's parent is new_node *)
       | Leaf _ -> failwith "Illegal state: a Leaf cannot be a parent."
     )
 
@@ -195,7 +188,7 @@ end = struct
   let merge_and_compress_nodes (n_old : tree) (n_new : tree) : unit =
     match n_old, n_new with 
     | Node n1, Node n2 ->
-      n1.data <- Data.compress n1.param n1.data n2.data; (* no need to copy data: reusing memory *)
+      n1.data <- CData.compress n1.param n1.data n2.data; (* no need to copy data: reusing memory *)
       update_parent_in_child n2.child n_old; (* now n2's child's parent is n1 *)
       n1.child <- n2.child (* now n1's child in n2's child*)
     | _, _ -> ()
@@ -204,11 +197,10 @@ end = struct
   ** to_del must be a subtree of branch.
   ** Branch is replaced by its other child.
   ** Throws [Invalid_argument] if to_del is not a child of branch *)
-  let delete_from_branch (to_del : tree) (branch : tree) : int =
+  let delete_from_branch (to_del : tree) (branch : tree) : unit =
     match branch with 
-    | Root _ | Node _ -> 0
+    | Root _ | Node _ -> ()
     | Branch b -> 
-      let size_deleted = ref 0 in
       let other_child = if (equal b.left to_del) 
                         then b.right 
                         else  if (equal b.right to_del) 
@@ -216,15 +208,12 @@ end = struct
                               else invalid_arg "Argument to_del is not a child of branch."
         in
       if is_node other_child && is_node b.parent then ((* must merge the two nodes and compress their data *)
-        size_deleted := (Data.size_of (get_data other_child)) + (Data.size_of (get_data b.parent));
-        merge_and_compress_nodes b.parent other_child;
-        size_deleted := !size_deleted - (Data.size_of (get_data b.parent))
+        merge_and_compress_nodes b.parent other_child
       ) else (
         update_child_in_parent branch other_child; (* now branch's parent's child is other_child *)
         update_parent_in_child other_child b.parent (* now other_child's parent is b.parent*)
-      );
-      !size_deleted
-    | Leaf _ -> 0
+      )
+    | Leaf _ -> ()
 
   (* Deletes the stem for the input leaf.
   ** Deletes the leaf itself and its ancestors until the first Branch, which is replaced by its other child.
@@ -232,21 +221,19 @@ end = struct
   ** Deleting might trigger a compression higher in the tree.
   ** Throws [Invalid_argument] if the input tree is not a Leaf.
   ** Throws [Failure] if the tree is in an illegal state. *)
-  let delete (leaf: tree) : int =
+  let delete (leaf: tree) : unit =
     match leaf with
     | Root _ | Node _ | Branch _ -> invalid_arg "The argument tree must be a Leaf."
     | Leaf l -> (
       match l.parent with 
-      | Root _ -> 0 (* the tree stays unchanged in this case *)
+      | Root _ -> () (* the tree stays unchanged in this case *)
       | Node n -> (
         match n.parent with 
         | Root _ -> (* delete only the data: make leaf point to Root *)
-          l.parent <- n.parent;
-          Data.size_of n.data
+          l.parent <- n.parent
         | Node n -> failwith "Illegal state: A Node's parent cannot be a Node." 
         | Branch b -> (* Replace the Branch with its other child. Compress if possible. *)
-          let deleted_from_compression = delete_from_branch l.parent n.parent in
-          deleted_from_compression + (Data.size_of n.data)
+          delete_from_branch l.parent n.parent
         | Leaf _ -> failwith "Illegal state: a Leaf cannot be a parent."
       )
       | Branch b -> (* Replace the Branch with its other child. Compress if possible. *)
@@ -259,18 +246,18 @@ end = struct
   ** Returns None if none the leaf's ancestors are Nodes
   ** This operation does not modify the tree
   ** Throws [Invalid_argument] if the input tree is not a Leaf. *)
-  let get_compressed_data (leaf: tree): data option =
+  let get_compressed_data (leaf: tree): CData.t option =
     match leaf with
     | Root _ | Node _ | Branch _ -> invalid_arg "The argument tree must be a Leaf."
     | Leaf _ -> 
-      let rec get_rec (t: tree): data option =
+      let rec get_rec (t: tree): CData.t option =
         match t with 
         | Root _ -> None
         | Node n -> (
           match (get_rec n.parent) with
           (* the data must be copied otherwise it might get modified by the compression operation *)
-          | Some dt -> Some (Data.compress n.param dt (Data.copy n.data))
-          | None -> Some (Data.copy n.data)
+          | Some dt -> Some (CData.compress n.param dt (CData.copy n.data))
+          | None -> Some (CData.copy n.data)
         )
         | Branch b -> get_rec b.parent
         | Leaf l -> get_rec l.parent 
@@ -279,11 +266,11 @@ end = struct
 
   (* Returns the data of the first ancestor of the input leaf satisfying the condition f, if it exists.
   ** Throws [Invalid_argument] if the input tree is not a Leaf. *)
-  let get_deepest_such_that (leaf: tree) (f: Data.t -> bool): Data.t option =
+  let get_deepest_such_that (leaf: tree) (f: CData.t -> bool): CData.t option =
     match leaf with
     | Root _ | Node _ | Branch _ -> invalid_arg "The argument tree must be a Leaf."
     | Leaf _ ->
-      let rec get_rec (t: tree) (f: Data.t -> bool): Data.t option =
+      let rec get_rec (t: tree) (f: CData.t -> bool): CData.t option =
         match t with 
         | Root _ -> None
         | Node n -> 
@@ -296,7 +283,7 @@ end = struct
 
   (* Returns the data for the input leaf that is shared with no other leaf, if it exists.
   ** Throws [Invalid_argument] if the input tree is not a Leaf. *)
-  let get_unshared_data (leaf: tree) : Data.t option =
+  let get_unshared_data (leaf: tree) : CData.t option =
     match leaf with
     | Root _ | Node _ | Branch _ -> invalid_arg "The argument tree must be a Leaf."
     | Leaf l -> (
@@ -310,7 +297,7 @@ end = struct
     match t with 
     | Root _ -> Printf.printf "Root\n"
     | Node n -> 
-      Printf.printf "Node %d (%s) -> " n.id (Data.to_string n.data);
+      Printf.printf "Node %d (%s) -> " n.id (CData.to_string n.data);
       print n.parent
     | Branch b -> 
       Printf.printf "Branch %d -> " b.id;
@@ -322,7 +309,7 @@ end = struct
   let rec to_string (t: tree): string =
     match t with 
     | Root _ -> "Root"
-    | Node n -> (Printf.sprintf "Node %d (%s) -> " n.id (Data.to_string n.data)) ^ (to_string n.parent)
+    | Node n -> (Printf.sprintf "Node %d (%s) -> " n.id (CData.to_string n.data)) ^ (to_string n.parent)
     | Branch b -> (Printf.sprintf "Branch %d -> " b.id) ^ (to_string b.parent)
     | Leaf l -> (Printf.sprintf "Leaf %d -> " l.id) ^ (to_string l.parent)
 
