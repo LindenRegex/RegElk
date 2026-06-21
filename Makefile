@@ -1,6 +1,6 @@
 all:main tests fuzzer stats benchmark matcher
 
-FILES = benchmark_vectors.ml timer.ml oracle.ml regex.ml bytecode.ml compiler.ml interpreter.ml tojs.ml toexp.ml cdn.ml anchors.ml tests.ml charclasses.ml flags.ml
+FILES = benchmark_vectors.ml timer.ml oracle.ml regex.ml bytecode.ml compiler.ml interpreter.ml tojs.ml toexp.ml cdn.ml anchors.ml tests.ml charclasses.ml vdflags.ml
 
 PARSER_SRC = parser_src/regex_lexer.mll parser_src/regex_parser.mly
 PARSER_FILES = parser/regex_lexer.ml parser/regex_parser.ml

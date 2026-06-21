@@ -6,7 +6,7 @@ open Sys
 open Filename
 open Interpreter
 open Charclasses
-open Flags
+open Vdflags
 
 (** * JS Regex pretty-printing  *)
 (* printing regexes in the JS style so that we can compare our results to a JS engine *)

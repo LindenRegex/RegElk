@@ -6,7 +6,7 @@ open Cdn
 open Interpreter
 open Tojs
 open Charclasses
-open Flags
+open Vdflags
 open Regs
 
 (* different registers implementations *)

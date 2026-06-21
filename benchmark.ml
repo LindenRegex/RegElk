@@ -12,7 +12,6 @@ open Gc
 open Vdflags
 open Arg
 open Benchmark_vectors
-open Spacebench
 
 (* path to V8 executable *)
 (* this V8 executable needs to be patched in two ways: *)
@@ -36,6 +35,9 @@ let irregexptimer = "scripts_bench/irregexptimer.js"
 let warmups = ref 10
 (* the number of times we perform each test *)
 let repetitions = ref 10
+
+(* the method to use to measure space *)
+let method_space = ref ""
  
 
 (* calling the matcher.native executable *)
@@ -84,7 +86,7 @@ let get_time (e:engine) (r:raw_regex) (str:string) (impl:string): string =
 let get_space_ocaml (bin: string) (r:raw_regex) (str:string) (impl:string): string =
   let regex_string = " \""^print_js r^"\" " in
   let input_string = " \""^str^"\" " in
-  let sys = bin ^ " " ^ regex_string ^ input_string ^ string_of_int !warmups ^ " " ^ string_of_int !repetitions ^ " " ^ impl in
+  let sys = bin ^ " " ^ regex_string ^ input_string ^ string_of_int !warmups ^ " " ^ string_of_int !repetitions ^ " " ^ impl ^ " " ^ !method_space in
   string_of_command(sys)
 
 (* Available as find_index in Stdlib since 5.1, but only 5.0 is required *)
@@ -130,7 +132,12 @@ let extract_val (jsout : string) (colname: string) : string =
 
 let get_space (e:engine) (r:raw_regex) (str:string) (impl:string): string =
   match e with
-  | OCaml -> (extract_val (get_space_ocaml "./matcher_space.native" r str impl) "mjWd/Run") ^ "\n"
+  | OCaml -> (
+    let res = get_space_ocaml "./matcher_space.native" r str impl in
+    if (!method_space = "corebench") then 
+      (extract_val res "Time/Run") ^ "," ^ (extract_val res "mjWd/Run") ^ "," ^ (extract_val res "mWd/Run") ^ "\n"
+    else res
+  )
   | OCamlBench -> failwith "TODO"
   | OldV8Linear -> failwith "TODO"
   | NewV8Linear -> failwith "TODO"
@@ -142,11 +149,14 @@ let get_space (e:engine) (r:raw_regex) (str:string) (impl:string): string =
 let run_regex_config (ec:engine_conf) (param_regex:int->raw_regex) (str:string) (name:string) : unit =
   Printf.printf "Testing engine %s:\n%!" (engine_name ec.eng);
   let oc = open_out (bench_dir^name^"_"^(engine_name ec.eng)^".csv") in
-  for i = ec.min_size to ec.max_size do
-    Printf.printf " %s\r%!" (string_of_int i); (* live update *)
-    let reg = param_regex i in
+  let step = if ec.qua = Space then 10 else 1 in
+  let i = ref ec.min_size in
+  while !i <= ec.max_size do
+    Printf.printf " %s\r%!" (string_of_int !i); (* live update *)
+    let reg = param_regex !i in
     let quantity = (if ec.qua = Space then get_space else get_time) ec.eng reg str name in
-    Printf.fprintf oc "%d,%s%!" i quantity; (* printing to the csv file *)
+    Printf.fprintf oc "%d,%s%!" !i quantity; (* printing to the csv file *)
+    i := !i + step
   done;
   close_out oc;
   Printf.printf "\n%!";
@@ -156,28 +166,26 @@ let run_regex_config (ec:engine_conf) (param_regex:int->raw_regex) (str:string) 
 let run_ocamlbench_config (ec:engine_conf) (param_str:int->string) (reg:raw_regex) (name:string) : unit =
   failwith "TODO"
 
-
-let run_simple_config (ec:engine_conf) (param_str:int->string) (reg:raw_regex) (name:string) : unit =
-  let oc = open_out (bench_dir^name^"_"^(engine_name ec.eng)^".csv") in
-  for i = ec.min_size to ec.max_size do
-    Printf.printf " %s\r%!" (string_of_int i); (* live update *)
-    let str = param_str i in
-    let quantity = (if ec.qua = Space then get_space else get_time) ec.eng reg str name in
-    Printf.fprintf oc "%d,%s%!" i quantity; (* printing to the csv file *)
-  done;
-  close_out oc;
-  Printf.printf "\n%!";
-  Unix.sleep 1
-
-
 (* runs a string-size benchmark on a single engine and prints the result to a csv file *)
 let run_string_config (ec:engine_conf) (param_str:int->string) (reg:raw_regex) (name:string) : unit =
   Printf.printf "Testing engine %s:\n%!" (engine_name ec.eng);
   match ec.eng with
   | OCamlBench ->
-     run_ocamlbench_config ec (param_str:int->string) (reg:raw_regex) (name:string)
+      run_ocamlbench_config ec (param_str:int->string) (reg:raw_regex) (name:string)
   | _ ->
-     run_simple_config ec (param_str:int->string) (reg:raw_regex) (name:string)
+      let oc = open_out (bench_dir^name^"_"^(engine_name ec.eng)^".csv") in
+      let step = if ec.qua = Space then 10 else 1 in
+      let i = ref ec.min_size in
+      while !i <= ec.max_size do
+        Printf.printf " %s\r%!" (string_of_int !i); (* live update *)
+        let str = param_str !i in
+        let quantity = (if ec.qua = Space then get_space else get_time) ec.eng reg str name in
+        Printf.fprintf oc "%d,%s%!" !i quantity; (* printing to the csv file *)
+        i := !i + step
+      done;
+      close_out oc;
+      Printf.printf "\n%!";
+      Unix.sleep 1
 
 let run_regex_benchmark (rb:regex_benchmark) : unit =
   Printf.printf ("Generating .csv files for benchmark %s:\n") (rb.name);
@@ -186,8 +194,6 @@ let run_regex_benchmark (rb:regex_benchmark) : unit =
 let run_string_benchmark (sb:string_benchmark) : unit =
   Printf.printf ("Generating .csv files for benchmark %s:\n") (sb.name);
   List.iter (fun rc -> run_string_config rc sb.param_str sb.rgx sb.name) sb.confs
-
-
 
 
 (** * Benchmark Executable  *)
@@ -208,7 +214,8 @@ let main =
     [("-oldv8", Arg.Set_string old_v8_path, "old V8 path");
      ("-newv8", Arg.Set_string new_v8_path, "new V8 path");
      ("-warmups", Arg.Set_int warmups, "Number of Warmup Repetitions per iteration");
-     ("-repet", Arg.Set_int repetitions, "Number of Measured Repetitions");   
+     ("-repet", Arg.Set_int repetitions, "Number of Measured Repetitions");
+     ("-method", Arg.Set_string method_space, "The method to use to measure space")
     ] in
   let usage = "./benchmark.native [-oldv8 path_to_old_d8] [-newv8 path_to_new_d8] [-warmups 10] [-repet 10] benchmark list\n" in
   let full_usage = usage ^ "\nAvailable benchmarks: " ^ bench_names_string in

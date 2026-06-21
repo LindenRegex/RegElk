@@ -12,7 +12,7 @@ open Cdn
 open Anchors
 open Regs
 open Charclasses
-open Flags
+open Vdflags
 
 
 module type INTERP = sig
@@ -348,7 +348,6 @@ let filter_reset (r:regex) (capture:Regs.regs) (look:Regs.regs) (quant:Regs.regs
 (* the direction is only used to evaluate anchors *)
 let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction) : unit =
   if !debug then Printf.printf "%s\n%!" ("Clock "^string_of_int s.clock^"|Epsilon active: " ^ print_active s.active);
-    
   match s.active with
   | [] -> () (* done advancing epsilon transitions *)
   | t::ac -> (* t: highest priority active thread *)
@@ -368,8 +367,6 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
           s.active <- ac;
           advance_epsilon c s o dir
        | Accept -> (* updates the best match and discards the remaining active threads *)
-          (* call Regs.delete on all threads in active ? *)
-          (* compression is O(r) !! *)
           List.iter (fun t -> Regs.delete t.capture_regs; Regs.delete t.look_regs; Regs.delete t.quant_regs) ac;
           s.active <- [];
 

@@ -9,9 +9,7 @@ open Toexp
 open Charclasses
 open Vdflags
 open Regs
-open Spacebench
 
-(*open Core*)
 open Core_bench
 open Command_unix
 
@@ -47,12 +45,14 @@ let get_impl_from_name (s:string) : string =
 (* This executable is to be called directly by the benchmarks *)
    
 (* Executing the OCaml linear engine on a regex and a string *)
-(* Expects exactly 4 arguments:
+(* Expects exactly 6 arguments:
 - the regex
 - the input string
 - the number of warmup repetitions
-- a string indicating the type of register implementation to use "ArrayRegs", "ListRegs" or "MapRegs" *)
-(* Prints the total time in seconds *)
+- the number of repetitions
+- a string indicating the type of register implementation to use "ArrayRegs", "ListRegs" or "MapRegs"
+- the method to use "corebench" or "GCtopwords" 
+*)
 
 let input_str = ref ""
 let input_regex = ref ""
@@ -75,7 +75,10 @@ let main =
   let argv = Sys.argv in
   let regex = argv.(1) in
   let string = argv.(2) in
+  (* let warmups = int_of_string(Sys.argv.(3)) in *)
+  let repetitions = int_of_string(argv.(4)) in
   let reg_implem = get_impl_from_name argv.(5) in
+  let meth = argv.(6) in
 
   (*let matcher = get_matcher reg_implem in*)
   let build_oracle = get_build_oracle reg_implem in
@@ -91,31 +94,40 @@ let main =
   (* triggering garbage collector *)
   Gc.full_major();
 
-  (* Using Jane Street's core bench *)
+  if (meth = "corebench") then (
+    (* Using Jane Street's core bench *)
 
-  (* Set the command line arguments to column names so core bench does not complain *)
-  argv.(1) <- "time";
-  argv.(2) <- "alloc";
-  argv.(3) <- "gc";
-  argv.(4) <- "percentage";
-  argv.(5) <- "samples";
+    (* Set the command line arguments to column names so core bench does not complain *)
+    argv.(1) <- "time";
+    argv.(2) <- "alloc";
+    argv.(3) <- "gc";
+    argv.(4) <- "percentage";
+    argv.(5) <- "samples";
+    argv.(6) <- "time";
 
-  let cmd = Bench.make_command [
-      Bench.Test.create ~name:"Matcher"
-        (fun () -> 
-          let o = build_oracle compiled_regex string in
-          ignore(build_capture compiled_regex string o)
-        )
-    ] in
+    let cmd = Bench.make_command [
+        Bench.Test.create ~name:"Matcher"
+          (fun () -> 
+            let o = build_oracle compiled_regex string in
+            ignore(build_capture compiled_regex string o)
+          )
+      ] in
 
-  Command_unix.run cmd
+    Command_unix.run cmd
 
-  (* Using a counter *)
+  ) else if (meth = "GCtopwords") then (
+    (* Using GC top heap words *)
 
-  (*max_space := 0;
-  current_space := 0;
+    let mjh_size_sum = ref 0 in
 
-  let o = build_oracle compiled_regex string in
-  ignore(build_capture compiled_regex string o);
+    for i = 0 to (repetitions - 1) do
+      Gc.full_major();
+      let o = build_oracle compiled_regex string in
+      ignore(build_capture compiled_regex string o);
+      mjh_size_sum := !mjh_size_sum + (Gc.stat()).top_heap_words
+    done;
 
-  Printf.printf ("%i\n") !max_space*)
+    Printf.printf ("%i") (!mjh_size_sum)
+  ) else (
+    Printf.printf "Unknown method: %s" meth
+  )

@@ -6,7 +6,7 @@ open Tojs
 open Regex
 open Random
 open Charclasses
-open Flags
+open Vdflags
 open Regs
 
 type reg_impl =
