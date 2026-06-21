@@ -7,7 +7,7 @@ open Cdn
 open Tojs
 open Toexp
 open Charclasses
-open Flags
+open Vdflags
 open Regs
 
 module INTARRAY = Interpreter(Regs.Array_Regs) 
@@ -32,6 +32,11 @@ let get_build_capture (s:string) =
   else if (s = "MapRegs") then INTTREE.build_capture
   else if (s = "VirtualTreeRegs") then INTVIRTUALTREE.build_capture
   else INTLIST.build_capture
+
+let get_impl_from_name (s:string) : string =
+  match String.index_opt s '_' with
+  | Some i -> String.sub s 0 i
+  | None -> s
 
 
 (** * Measuring The OCaml engine execution  *)
@@ -67,7 +72,7 @@ let main =
   let string = Sys.argv.(2) in
   let warmups = int_of_string(Sys.argv.(3)) in
   let repetitions = int_of_string(Sys.argv.(4)) in
-  let reg_implem = Sys.argv.(5) in
+  let reg_implem = get_impl_from_name(Sys.argv.(5)) in
 
   let matcher = get_matcher reg_implem in
   let build_oracle = get_build_oracle reg_implem in
