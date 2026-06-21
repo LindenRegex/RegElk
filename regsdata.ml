@@ -125,26 +125,21 @@ end = struct
   let compress (regs_size: p) (t_old: t) (t_new: t): t = 
     match t_old, t_new with
     | Complete a_old, Complete a_new -> (* merge arrays *)
-      (*Printf.printf "Compress arrays, size = %d\n" regs_size;*)
       let (a_cp, a_clk) = merge_arrays a_old.a_cp a_new.a_cp a_old.a_clk a_new.a_clk in
       Complete({a_cp=a_cp; a_clk=a_clk})
     | Complete a_old, Incomplete l_new -> (* l_new overwrites a_old *)
-      (*Printf.printf "Compress new list (size %d) with old array (size = %d)\n" l_new.size regs_size;*)
       let (a_cp, a_clk) = compress_new_list_old_arrays a_old.a_cp a_old.a_clk l_new.l in
       Complete({a_cp=a_cp; a_clk=a_clk})
     | Incomplete l_old, Complete a_new -> (* incorporate l_old into a_new where a_new is -2 ("undefined") *)
-      (*Printf.printf "Compress old list (size %d) with new array (size = %d)\n" l_old.size regs_size;*)
       let (a_cp, a_clk) = compress_new_arrays_old_list a_new.a_cp a_new.a_clk l_old.l in
       Complete({a_cp=a_cp; a_clk=a_clk}) 
     | Incomplete l_old, Incomplete l_new ->
       let size = l_new.size + l_old.size in
       (* if result has size larger that the registers size, convert to complete form *)
       if size >= regs_size then (
-      (*Printf.printf "Compress lists (size : %d) : convert to arrays (size = %d)\n" size regs_size;*)
         let (a_cp, a_clk) = lists_to_arrays regs_size l_old.l l_new.l in
         Complete({a_cp=a_cp; a_clk=a_clk})
       ) else (
-        (*Printf.printf "Compress lists: concat size_new: %d, size_old: %d \n" l_new.size l_old.size;*)
         (* concatenate, most recent updates go first *)
         Incomplete({size=size; l=(l_new.l @ l_old.l)})
       )

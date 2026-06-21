@@ -162,15 +162,6 @@ module List_Regs =
            if (a_cp.(k) = -1) then a_cp.(k) <- cp;
            if (a_clk.(k) = -1) then a_clk.(k) <- clk;
            fill_array l' in
-
-      (*let rec fill_array2 (l: (int*int*int) list) : unit =
-        match l with 
-        | [] -> ()
-        | (k, cp, clk) :: l' ->
-          fill_array2 l'; (* fill with less recent updates first *)
-          a_cp.(k) <- cp;
-          a_clk.(k) <- clk in
-      fill_array2 regs.setlist;*)
       fill_array regs.setlist;
       (a_cp, a_clk)
 
@@ -247,12 +238,11 @@ module Map_Regs =
   end
 
 
-(* ///////////////////////////////////////////////////////////////// *)
 
 open Virtual_tree
-open Regsdata2
+open Regsdata
 
-module Regs_Vt = Virtual_tree(Regsdata2)
+module Regs_Vt = Virtual_tree(Regsdata)
 
 module Virtual_Tree_Regs = 
   struct
@@ -262,9 +252,11 @@ module Virtual_Tree_Regs =
       size: int
     }
 
+    (* O(1) *)
     let init_regs (size: int): regs =
-      { leaf = Regs_Vt.empty size; size = size}
+      { leaf = Regs_Vt.initial_tree size; size = size}
 
+    (* O(r) *)
     let set_reg (regs:regs) (k:int) (cp:int option) (clk:int) : regs =
       (match (Regs_Vt.get_unshared_data regs.leaf) with
       | Some d -> (
@@ -273,47 +265,59 @@ module Virtual_Tree_Regs =
           arrays.a_cp.(k) <- int_of_opt cp;
           arrays.a_clk.(k) <- clk
         | Incomplete _ -> (* we must insert here *)
-          let size_inserted = Regs_Vt.insert regs.leaf (Regsdata2.Incomplete({size=1; l=[(k, int_of_opt cp, clk)]})) in
-          space_increment size_inserted
+          Regs_Vt.insert regs.leaf (Regsdata.Incomplete({size=1; l=[(k, int_of_opt cp, clk)]}))
       )
       | None -> 
         (* the leaf has no unshared data: must insert k cp and clk in tree *)
-        let size_inserted = Regs_Vt.insert regs.leaf (Regsdata2.Incomplete({size=1; l=[(k, int_of_opt cp, clk)]})) in
-        space_increment size_inserted
+        Regs_Vt.insert regs.leaf (Regsdata.Incomplete({size=1; l=[(k, int_of_opt cp, clk)]}))
       );
-      (*let size_inserted = Regs_Vt.insert regs.leaf (Regsdata2.Incomplete({size=1; l=[(k, int_of_opt cp, clk)]})) in
-      space_increment size_inserted;*)
       regs
 
+    (* O(r) *)
     let clear_reg (regs:regs) (k:int) : regs = 
-      (* insert -1 in tree *)
-      let size_inserted = Regs_Vt.insert regs.leaf (Regsdata2.Incomplete({size=1; l=[(k, -1, -1)]})) in
-      space_increment size_inserted;
+      (* insert -1 in the virtual tree *)
+      (match (Regs_Vt.get_unshared_data regs.leaf) with
+      | Some d -> (
+        match d with
+        | Complete arrays -> (* reuse memory : directly update the array *)
+          arrays.a_cp.(k) <- -1;
+          arrays.a_clk.(k) <- -1
+        | Incomplete _ -> (* we must insert here *)
+          Regs_Vt.insert regs.leaf (Regsdata.Incomplete({size=1; l=[(k, -1, -1)]}))
+      )
+      | None -> 
+        (* the leaf has no unshared data: must insert k cp and clk in tree *)
+        Regs_Vt.insert regs.leaf (Regsdata.Incomplete({size=1; l=[(k, -1, -1)]}))
+      );
       regs
 
-    (* we might remove get_cp and get_clock and always convert to an array first for filtering *)
+    (* O(r*log(r)) *)
     let get_cp (regs: regs) (k: int) : int option =
-      (* get deepest (most recent) such that it is defined *)
-      match (Regs_Vt.get_deepest_such_that regs.leaf (fun x -> (Regsdata2.get_cp_at x k) <> -2)) with
-      | Some d -> opt_of_int (Regsdata2.get_cp_at d k)
+      (* get deepest (most recent) defined value for register k *)
+      match (Regs_Vt.get_deepest_such_that regs.leaf (fun x -> (Regsdata.get_cp_at x k) <> -2)) with
+      | Some d -> opt_of_int (Regsdata.get_cp_at d k)
       | None -> None
 
+
+    (* O(r*log(r)) *)
     let get_clock (regs: regs) (k: int) : int option =
-      match (Regs_Vt.get_deepest_such_that regs.leaf (fun x -> (Regsdata2.get_clk_at x k) <> -2)) with
-      | Some d -> opt_of_int (Regsdata2.get_clk_at d k)
+      (* get deepest (most recent) defined value for register k *)
+      match (Regs_Vt.get_deepest_such_that regs.leaf (fun x -> (Regsdata.get_clk_at x k) <> -2)) with
+      | Some d -> opt_of_int (Regsdata.get_clk_at d k)
       | None -> None
 
+    (* O(1) *)
     let copy (regs: regs): regs =
-      (* call split and return result *)
       { leaf = Regs_Vt.split regs.leaf; size = regs.size}
 
+    (* O(r) *)
     let delete (regs: regs): unit =
-      let size_deleted = Regs_Vt.delete regs.leaf in
-      space_decrement size_deleted
+      Regs_Vt.delete regs.leaf
 
+    (* O(r*r) *)
     let to_arrays (regs: regs): int Array.t * int Array.t =
       match (Regs_Vt.get_compressed_data regs.leaf) with
-      | Some dt -> Regsdata2.to_arrays regs.size dt
+      | Some dt -> Regsdata.to_arrays regs.size dt (* might have -2 values but if it does it never get used anyways *)
       | None -> (Array.make regs.size (-1), Array.make regs.size (-1))
 
     let to_string (regs: regs): string =
