@@ -50,7 +50,7 @@ decimaldigit:
 decimaldigits:
   | d1=decimaldigits d2=decimaldigit { d1 ^ String.make 1 d2 }
   | d=decimaldigit { String.make 1 d }
-  
+
 
 /* https://tc39.es/ecma262/#sec-patterns */
 
@@ -104,7 +104,7 @@ counted_quantifier:
   | LBRAC dmin=decimaldigits COMMA dmax=decimaldigits RBRAC QMARK { {min=int_of_string dmin; max=Some (int_of_string dmax); greedy=false} }
 
 atom:
-  | c=patterncharacter { Raw_character(Char c) }  
+  | c=patterncharacter { Raw_character(Char c) }
 /* TODO: { for instance can be parsed as single char. But not (. I'm not sure where this is in the spec. Also I'm not sure why, if I add a similar rule for LBRAC, it does not work */
   | DOT { Raw_character(Dot) }
   | BACKSL a=atomescape { a }
@@ -161,7 +161,7 @@ patterncharacter:
   | RBRAC { '}' }
 /* TODO: still a bug when parsing for instance a{ */
   | LBRACK { '[' }
-  | RBRACK { ']' } 
+  | RBRACK { ']' }
   | d=decimaldigit { d }
 
 
@@ -229,7 +229,7 @@ nonemptyclassrangesnodash:
   | a=classatom { [a] }
   | a=classatomnodash n=nonemptyclassrangesnodash { a::n }
   | a1=classatomnodash MINUS a2=classatom c=classcontents { (Charclasses.make_range a1 a2) @ c }
-  
+
 
 
 /* I'm removing the character groups \s \w... */

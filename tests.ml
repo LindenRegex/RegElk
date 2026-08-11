@@ -20,7 +20,7 @@ end = struct
   module CMP = Tojs.Compare(Interpreter)
 
 (** * Manual Testing *)
-   
+
 let oracle_tests () =
   let o = create_oracle 4 8 in
   assert (Array.length o = 5);
@@ -89,10 +89,10 @@ let compare_engines_tests() =
   ignore(CMP.compare_engines (Raw_con (Raw_quant (Star, Raw_capture (raw_char 'a')), raw_char 'b')) "aaab");
   ignore(CMP.compare_engines (raw_char 'a') "b");
   ignore(CMP.compare_engines (Raw_quant (Star, Raw_alt (Raw_capture(raw_char 'a'), Raw_capture(raw_char 'b')))) "ababab")
-  
-  
+
+
 (** * Gathering some errors found with the fuzzer *)
-  
+
 let string_sub_errors : (raw_regex*string) list = (* FIXED! reverse registers for lookbehinds groups *)
   [(Raw_lookaround(Lookbehind,Raw_capture(raw_dot)),"bababaaabbacacbabbacabcccaaacaabccab");
    (Raw_lookaround(Lookbehind,Raw_capture(Raw_con(Raw_capture(Raw_capture(Raw_alt(Raw_empty,Raw_lookaround(Lookbehind,Raw_lookaround(NegLookahead,Raw_quant(LazyStar,Raw_alt(Raw_lookaround(NegLookahead,raw_dot),Raw_capture(raw_dot)))))))),Raw_lookaround(Lookbehind,Raw_capture(raw_dot))))),"bcacaaaacaabcbbcacaaacbbaabc");
@@ -101,16 +101,16 @@ let string_sub_errors : (raw_regex*string) list = (* FIXED! reverse registers fo
 
 let oracle_assert_errors : (raw_regex*string) list = (* FIXED! read str.cp - 1 backward *)
   [(Raw_con(Raw_lookaround(Lookbehind,Raw_empty),Raw_lookaround(Lookbehind,Raw_lookaround(Lookbehind,raw_char('a')))),"ccbba")]
-  
+
 let expected_result_oracle_errors : (raw_regex*string) list = (* FIXED! read str.cp - 1 backward *)
   [(Raw_lookaround(Lookbehind,raw_char('b')),"bccaaacabcbcabaacbccaccbbbaaccccaabcac");
    (Raw_lookaround(Lookbehind,raw_char('a')),"cabbcabcccacbbabcb")]
 
 let idk : (raw_regex*string) list = (* FIXED, by one of the changes above *)
   [(Raw_capture(Raw_con(Raw_con(Raw_lookaround(Lookbehind,Raw_lookaround(Lookbehind,Raw_alt(Raw_alt(raw_char('b'),Raw_capture(Raw_empty)),raw_char('a')))),Raw_quant(Star,Raw_lookaround(NegLookbehind,Raw_capture(Raw_lookaround(NegLookahead,Raw_lookaround(NegLookbehind,Raw_lookaround(NegLookahead,raw_char('c')))))))),Raw_quant(Plus,Raw_con(raw_dot,Raw_empty)))),"babcbcaacccbbcccabacaccaaccbabcbbbabbabbbabbcbcaa")]
-  
+
 let clear_mem : (raw_regex*string) list = (* FIXED! clear the lookaround memory in quantifiers *)
-  [(Raw_quant(Star,Raw_alt(Raw_con(raw_char('a'),Raw_lookaround(Lookahead,Raw_capture(raw_char('b')))),raw_char('b'))),"abc")] 
+  [(Raw_quant(Star,Raw_alt(Raw_con(raw_char('a'),Raw_lookaround(Lookahead,Raw_capture(raw_char('b')))),raw_char('b'))),"abc")]
 
 let empty_problem : (raw_regex*string) list = (* FIXED, by compiling Plus as Concatenation with Star when needed *)
   [(Raw_con(Raw_lookaround(NegLookbehind,raw_char('b')),Raw_quant(Plus,Raw_alt(Raw_empty,Raw_capture(raw_dot)))),"bbccbacbccbcabbcbcaccccba");
@@ -119,7 +119,7 @@ let empty_problem : (raw_regex*string) list = (* FIXED, by compiling Plus as Con
 
 let double_quant : (raw_regex*string) list = (* FIXED, with another way to compile lazystar *)
   [(Raw_quant(Plus,Raw_alt(Raw_quant(LazyStar,Raw_lookaround(NegLookbehind,Raw_con(Raw_lookaround(NegLookbehind,Raw_lookaround(NegLookbehind,Raw_alt(raw_char('c'),raw_char('c')))),Raw_lookaround(NegLookbehind,Raw_quant(Plus,raw_dot))))),raw_dot)),"abacaaaacabaccbcabcacabccbcaacbabaa");
-   (Raw_capture(Raw_quant(Plus,Raw_quant(LazyStar,raw_dot))),"bacababaacbcabaabccccacca"); 
+   (Raw_capture(Raw_quant(Plus,Raw_quant(LazyStar,raw_dot))),"bacababaacbcabaabccccacca");
    (Raw_con(Raw_con(Raw_empty,Raw_capture(Raw_quant(Star,Raw_quant(LazyStar,raw_dot)))),raw_dot),"abcbbca")]
 
 let empty_group : (raw_regex*string) list =
@@ -275,7 +275,7 @@ let cin_clock_mismatch: (raw_regex*string) list=
 let lazy_cin: (raw_regex*string) list =
   [(Raw_con(Raw_quant(LazyPlus,Raw_capture(Raw_quant(LazyStar,Raw_quant(LazyPlus,Raw_quant(LazyPlus,Raw_quant(LazyPlus,Raw_quant(QuestionMark,Raw_quant(LazyPlus,Raw_character(Dot))))))))),Raw_character(Char('a'))),"b--b-ab-bb--bbbaaa--bbabab-aab-a-bb-a-abbb-bbbaa--bbabb--ba--bbab--aabb---ab-----bbb-bbbba--");
   (Raw_con(Raw_quant(LazyPlus,Raw_capture(Raw_quant(LazyStar,Raw_character(Dot)))),Raw_character(Char('a'))),"b-a")]
-  
+
 (* JS is stuck (timeout), but not our engine *)
 (* I quickly stopped listing these, I found too many *)
 let redos : (raw_regex*string) list =
@@ -314,9 +314,9 @@ let replay_bugs (l:(raw_regex*string) list) =
 let replay_stuck (l:(raw_regex*string) list) =
   List.iter (fun (raw,str) -> ignore(Interpreter.full_match raw str)) l
 
-  
+
 (** * Running tests  *)
-  
+
 let tests () =
   Printf.printf "\027[32mTests: \027[0m\n\n";
   oracle_tests();

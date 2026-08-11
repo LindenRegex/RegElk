@@ -3,7 +3,7 @@
 
 open Array
 
-type oracle = bool Array.t Array.t 
+type oracle = bool Array.t Array.t
 
 let create_oracle (str_size:int) (look_nb:int): oracle =
   assert (str_size >= 0);
@@ -23,10 +23,10 @@ let get_oracle (o:oracle) (cp:int) (lookid:int): bool =
   o.(cp).(lookid)
 
 (** * Pretty-printing  *)
-  
+
 let print_bool (b:bool) : string =
   if b then "\027[32m✔\027[0m" else "\027[31m✘\027[0m"
-  
+
 let print_oracle (o:oracle) : string =
   let s = ref "\027[31mOracle:\027[0m\n" in
   for j = 0 to ((Array.length o.(0)) -1) do

@@ -53,7 +53,7 @@ let negation (ce:char_expectation) : char_expectation =
   | All -> Ranges []
   | Single x -> Ranges (range_neg [(x,x)])
   | Ranges l -> Ranges (range_neg l)
-            
+
 (** * Usual Ranges - stopped at 255 *)
 (* \d *)
 let digit : (char * char) list =
@@ -73,7 +73,7 @@ let space : (char * char) list =
    (char_of_int 160,char_of_int 160)]
 (* for JS, also missing 5760, 8192-8202, 8232-8233, 8239, 8287, 12288, 65279 *)
 
-            
+
 (** * Character Groups  *)
 (* usual character classes *)
 
@@ -122,8 +122,8 @@ let make_range (e1:char_class_elt) (e2:char_class_elt) : char_class =
   match e1, e2 with
   | CChar c1, CChar c2 -> [CRange (c1,c2)]
   | _, _ -> [e1; CChar '-'; e2]
-                   
-           
+
+
 
 (** * Character Acceptance  *)
 
@@ -134,7 +134,7 @@ let rec is_in_range (c:char) (l:(char*char) list) : bool =
      if (c < ch1) then false    (* the list is assumed to be ordered *)
      else if (c >= ch1 && c <= ch2) then true
      else is_in_range c l'
-             
+
 (* is a read character accepted by an expectation *)
 let is_accepted (read:char option) (ce:char_expectation): bool =
   match read,ce with
@@ -182,8 +182,8 @@ let print_class_char (c:char) : string =
   else if (c = '\"') then "\\x22" (* to avoid weird bash issues *)
   else if (is_ascii_word_character c) then String.make 1 c
   else "\\"^String.make 1 c        (* escaping everything but word characters *)
-  
-                
+
+
 let rec ranges_to_string (l:(char*char) list) : string =
   match l with
   | [] -> ""
@@ -198,8 +198,8 @@ let rec ranges_to_int_string (l:(char*char) list) : string =
   | (cstart,cend)::[] -> "("^string_of_int(int_of_char cstart)^","^string_of_int(int_of_char cend)^")"
   | (cstart,cend)::next -> "("^string_of_int(int_of_char cstart)^","^string_of_int(int_of_char cend)^");"^
                              ranges_to_int_string next
-                         
-              
+
+
 let expectation_to_string (ce:char_expectation) : string =
   match ce with
   | All -> "All"

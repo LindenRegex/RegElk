@@ -61,7 +61,7 @@ let get_time_js (raw:raw_regex) (str:string) : string =
   let js_regex = "'" ^ js_regex ^ "'" in (* adding quotes to escape special characters *)
   let js_command = "node scripts_bench/jstimer.js " ^ js_regex ^ " " ^ "'"^str^"'" in
   string_of_command(js_command)
-  
+
 (** *  Comparing JS engine with our engine *)
 
 module Compare (Interpreter:INTERP): sig
@@ -81,7 +81,7 @@ let compare_js_ocaml (raw:raw_regex) (str:string) : compare_result =
   let ver_save = !verbose in
   debug := false;
   verbose := false;
-  
+
   Printf.printf "\027[36mRegex:\027[0m %s || " (print_regex (annotate raw));
   Printf.printf "\027[36mJS Regex:\027[0m %s || " (print_js raw);
   Printf.printf "\027[36mString:\027[0m \"%s\"\n%!" str;
@@ -92,12 +92,12 @@ let compare_js_ocaml (raw:raw_regex) (str:string) : compare_result =
   Printf.printf "\027[35mLinear result:\027[0m\n%s%!" sl;
   let result = if (String.compare sjs "Timeout\n\n" = 0) then Timeout
                else if (String.compare sjs sl = 0) then Equal else Error in
-  
+
   (* resetting flag values *)
   debug := dbg_save;
   verbose := ver_save;
   result
-                                                
+
 
 (* fails on errors, and returns false on timeouts (we couldn't verify the equality) *)
 let compare_engines (raw:raw_regex) (str:string) : bool =

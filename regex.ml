@@ -71,7 +71,7 @@ type character =
   | Group of char_group         (* PERL character classes \s, \w... *)
   | Class of char_class         (* a character class *)
   | NegClass of char_class      (* a negated character class *)
-  
+
 
 (** * Raw Regexes  *)
 (* Input regexes, before they get annotated with capture groups identifiers and lookaround identifiers *)
@@ -96,7 +96,7 @@ let raw_qmark (r:raw_regex) : raw_regex = Raw_quant(QuestionMark, r)
 let raw_group (g:char_group) : raw_regex = Raw_character (Group g)
 let raw_class (c:char_class) : raw_regex = Raw_character (Class c)
 let raw_neg_class (c:char_class) : raw_regex = Raw_character (NegClass c)
-                
+
 (** * Nullable Regexes  *)
 (* Nullable quantifiers can be compiled differently *)
 (* here we simply identify nullable regexes *)
@@ -108,12 +108,12 @@ let raw_neg_class (c:char_class) : raw_regex = Raw_character (NegClass c)
 
 (* Note that sometimes we can classify CIN regexes as CDN (for instance if we go through a lookaround that is always true), *)
 (* but our solution for CDN regexes also works for CIN (more general but slower) *)
-                   
+
 type nullability =
   | NonNullable                 (* it is impossible for the regex to be nulled *)
   | CDNullable                  (* teh regex can be nulled depending on the current string position *)
-  | CINullable                  (* the regex can be nulled, and this does not depend on the current string position *)                        
-                        
+  | CINullable                  (* the regex can be nulled, and this does not depend on the current string position *)
+
 (** * Annotated Regexes  *)
 
 (* capture unique identifiers *)
@@ -137,7 +137,7 @@ type regex =
 
 
 (** * Computing Nullability  *)
-                   
+
 let null_or (n1:nullability) (n2:nullability): nullability =
   match n1 with
   | NonNullable -> n2
@@ -153,7 +153,7 @@ let null_and (n1:nullability)  (n2:nullability): nullability =
                   | NonNullable -> NonNullable
                   | _ -> CDNullable end
   | CINullable -> n2
-  
+
 let rec nullable (r:regex) : nullability =
   match r with
   | Re_empty -> CINullable
@@ -166,7 +166,7 @@ let rec nullable (r:regex) : nullability =
   | Re_lookaround (_,_,_) -> CDNullable
   | Re_anchor _ -> CDNullable
 
-                    
+
 let rec raw_nullable (r:raw_regex) : nullability =
   match r with
   | Raw_empty -> CINullable
@@ -184,7 +184,7 @@ let rec raw_nullable (r:raw_regex) : nullability =
   | Raw_lookaround (_,_) -> CDNullable
   | Raw_anchor _ -> CDNullable
 
-                   
+
 (** * Regex Pretty-printing  *)
 
 (* WARNING: this is wrong in the sense that we don't print non-capturing groups *)
@@ -208,7 +208,7 @@ let print_counted_quant (q:counted_quantifier) : string =
             | Some m -> string_of_int m end in
   let lzy = if q.greedy then "" else "?" in
   "{"^min^","^max^"}"^lzy
-                  
+
 
 let print_lookaround (l:lookaround) : string =
   match l with
@@ -231,8 +231,8 @@ let print_character (c:character) : string =
   | Group g -> print_group g
   | Class c -> "[" ^ print_class c ^ "]"
   | NegClass c -> "[^" ^ print_class c^ "]"
-                     
-                   
+
+
 let rec print_raw (ra:raw_regex) : string =
   match ra with
   | Raw_empty -> ""
@@ -256,7 +256,7 @@ let rec print_regex (r:regex) : string =
   | Re_lookaround (lid, l, r1) -> "(" ^ "\027[36m" ^ string_of_int lid ^ "\027[0m" ^ print_lookaround l ^ print_regex r1 ^ ")"
   | Re_anchor a -> print_anchor a
 
-                                
+
 (** * Annotating Regexes  *)
 
 (* Adds annotation, identifiers for each capture group and lookaround *)
@@ -315,7 +315,7 @@ let lazy_prefix (r:regex) : regex =
  *   | EndInput -> BeginInput
  *   | _ -> a *)
 (* deprecated: we no longer reverse anchors. instead, the behavior of the anchor changes depending on the interpreter direction *)
-  
+
 let rec reverse_regex (r:regex) : regex =
   match r with
   | Re_empty | Re_character _ -> r
@@ -398,7 +398,7 @@ let rec max_lookaround (r:regex) : lookid =
 
 (* maximum capture group *)
 let rec max_group (r:regex) : capture =
-  match r with 
+  match r with
   | Re_empty | Re_character _ | Re_anchor _ -> 0
   | Re_alt (r1, r2) | Re_con (r1, r2) -> max (max_group r1) (max_group r2)
   | Re_quant (_,_,_,r1) | Re_lookaround (_,_,r1) -> max_group r1
@@ -448,7 +448,7 @@ match r with
 
 let cdn_plus_list (r:regex) : quantid list =
   cdn_plus_list' r []
-     
+
 
 (** * Error Reporting  *)
 (* we want to be able to print exactly the AST to the console so that we can copy paste it when the fuzzer finds a crash *)
@@ -495,13 +495,13 @@ let report_group (g:char_group) : string =
 (* when reporting chars that may require escaping *)
 let report_char (c:char) : string =
   "char_of_int("^string_of_int(int_of_char c)^")"
-              
+
 let report_class_elt (e:char_class_elt) : string =
   match e with
   | CChar x -> "CChar("^report_char x^")"
   | CRange (c1,c2) -> "CRange("^report_char c1^","^report_char c2^")"
   | CGroup g -> "CGroup("^report_group g^")"
-              
+
 let rec rep_class (c:char_class) : string =
   match c with
   | [] -> ""
@@ -518,7 +518,7 @@ let report_character (c:character) : string =
   | Group g -> "Group("^report_group g^")"
   | Class cl -> "Class("^report_class cl^")"
   | NegClass cl -> "NegClass("^report_class cl^")"
-  
+
 let rec report_raw (raw:raw_regex) : string =
   match raw with
   | Raw_empty -> "Raw_empty"
@@ -561,7 +561,7 @@ let rec plus_stats (r:regex) : int * int * int * int * int =
      then (nn1,cdn1,cin1,lnn1,ln1+1)
      else (nn1,cdn1,cin1,lnn1,ln1) (* not a plus *)
 
-     
+
 (** * Regex Well-Formedness  *)
 (* Checking that a regex is well-formed *)
 (* In practice, this means checking that ranges are well defined (the max is greater than the min) *)
@@ -573,16 +573,16 @@ let rec plus_stats (r:regex) : int * int * int * int * int =
 
 let char_wf (c:char) : bool =
   int_of_char c < 128
-     
+
 let class_elt_wf (e:char_class_elt) : bool =
   match e with
   | CChar c -> char_wf c
   | CGroup _ -> true
   | CRange (c1,c2) -> c1 <= c2
-     
+
 let class_wf (cl:char_class) : bool =
   List.fold_left (&&) true (List.map class_elt_wf cl)
-     
+
 let rec regex_wf (r:raw_regex) : bool =
   match r with
   | Raw_empty | Raw_anchor _ -> true
@@ -602,4 +602,3 @@ let rec regex_wf (r:raw_regex) : bool =
      | Dot | Group _ -> true
      | Class cl | NegClass cl -> class_wf cl
      end
-      

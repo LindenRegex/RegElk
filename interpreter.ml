@@ -28,7 +28,7 @@ end
 module Interpreter (Regs:REGS) : INTERP = struct
 
   let regs_name () = Regs.name
-  
+
 (** * Direction  *)
 (* In our algorithm, the interpreter can traverse the string in a forward way or in a backward way *)
 (* Backward is used when building the oracle for lookaheads *)
@@ -84,18 +84,18 @@ let debug_regs (regs:int Array.t) : string =
         s := !s ^ string_of_int c ^ ": " ^ string_of_int (regs.(c)) ^ " | "
       done;
       !s
-              
+
 (* each thread stores capture registers for the capture groups it has matched so far *)
 (* module Regs = (List_Regs : REGS) *)
-              
+
 
 (** * String Manipulation *)
 
 let get_char (str:string) (cp:int) : char option =
   try Some (String.get str cp) with
   | Invalid_argument _ -> None    (* when reaching the end of the string *)
-  
-  
+
+
 (** * Threads  *)
 
 (* each thread has a program counter in the bytecode and a map of capture registers *)
@@ -110,7 +110,7 @@ type thread =
 
 let init_thread (initcap:Regs.regs) (initlook:Regs.regs) (initquant:Regs.regs): thread =
   { pc = 0; capture_regs = initcap; look_regs = initlook; quant_regs = initquant; exit_allowed = false }
-  
+
 (** * PC Sets  *)
 
 (* for each PC of the bytecode, we want to track if, in a step of the interpreter, this PC has already been processed *)
@@ -129,7 +129,7 @@ let pc_add (pcs:pcset) (pc:label) : unit =
 (* check if a pc has been processed already *)
 let pc_mem (pcs:pcset) (pc:label) : bool =
   pcs.(pc)
-  
+
 (* adds a thread and char at the head of a blocked list only if it's not already in *)
 (* modifies the pcset in place *)
 let add_thread (t:thread) (x:char_expectation) (current:(thread*char_expectation) list) (inset:pcset) : (thread*char_expectation) list =
@@ -140,7 +140,7 @@ let add_thread (t:thread) (x:char_expectation) (current:(thread*char_expectation
     end
 
 (** * Boolean PC Sets  *)
-  
+
 (* For each PC of the bytecode, remembers if it has been handled for each possible state of the exit_allowed boolean *)
 type bpcset =
   {
@@ -161,8 +161,8 @@ let bpc_mem (bpcs:bpcset) (pc:label) (exit_bool:bool) : bool =
   | true -> pc_mem bpcs.true_set pc
   | false -> pc_mem bpcs.false_set pc
 
-                                                   
-  
+
+
 (** * Interpreter States  *)
 
 (* The interpreter alternates between two different steps to keep threads synchronized:
@@ -192,7 +192,7 @@ let cp_context (cp:int) (str:string) (dir:direction) : char_context =
   match dir with
   | Forward -> { prevchar = prevop ; nextchar = nextop }
   | Backward -> { prevchar = nextop ; nextchar = prevop }
-  
+
 let init_state (c:code) (initcp:int) (initcap:Regs.regs) (initlook:Regs.regs) (initquant:Regs.regs) (initclk:int) (initctx:char_context) : interpreter_state =
   { cp = initcp;
     active = [init_thread initcap initlook initquant];
@@ -209,15 +209,15 @@ let init_state (c:code) (initcp:int) (initcap:Regs.regs) (initlook:Regs.regs) (i
 
 let print_exit_allowed (b:bool) : string =
   if b then "\027[32m✔\027[0m" else "\027[31m✘\027[0m"
-  
+
 let print_thread (t:thread) : string = string_of_int t.pc ^ print_exit_allowed t.exit_allowed
 
 let print_active (l:thread list) : string =
   "  ACTIVE: " ^ List.fold_left (fun s t -> if (s = "") then (print_thread t) else (print_thread t) ^ ", " ^ s) "" l
-  
+
 let print_blk (b:thread * char_expectation) : string =
   "(" ^ print_thread (fst b) ^ ":" ^ expectation_to_string (snd b) ^ ")"
-  
+
 let print_blocked (l:(thread*char_expectation) list) : string =
   "  BLOCKED: " ^ List.fold_left (fun s b -> if (s = "") then (print_blk b) else (print_blk b) ^ ", " ^ s) "" l ^ "\n"
 
@@ -240,7 +240,7 @@ let get_op (c:int Array.t) (reg:int) : int option =
   let value = c.(reg) in
   if (value < 0) then None else Some value
 
-  
+
 (* extracting a capture group slice given its registers *)
 let print_slice (str:string) (startreg:int option) (endreg:int option) : string =
   match startreg with
@@ -280,7 +280,7 @@ let print_result (r:regex) (str:string) (c:(int Array.t) option) : string =
   let max = max_group r in
   !s ^ print_cap_option c max str ^ "\n"
 
-  
+
 
 (** * Filtering For Capture Reset  *)
 (* At the end of the algorithm, we get many capture groups that should be reset *)
@@ -320,7 +320,7 @@ let rec filter_capture (r:regex) (cap_regs:int Array.t) (cap_clocks: int Array.t
          else filter_capture r1 cap_regs cap_clocks look_clocks quant_clocks (-1)
                              (* resetting the maxclock to -1: lookaround clocks are reset *)
        end
-      
+
 and filter_all (r:regex) (regs:int Array.t) : unit = (* clearing all capture group inside a regex *)
   match r with
   | Re_empty | Re_character _ | Re_anchor _ -> ()
@@ -340,7 +340,7 @@ let filter_reset (r:regex) (capture:Regs.regs) (look:Regs.regs) (quant:Regs.regs
   filter_capture r cap_regs cap_clocks look_clocks quant_clocks maxclock;
   cap_regs
 
-  
+
 (** * Interpreter  *)
 
 (* modifies the state by advancing all threads along epsilon transitions *)
@@ -348,7 +348,7 @@ let filter_reset (r:regex) (capture:Regs.regs) (look:Regs.regs) (quant:Regs.regs
 (* the direction is only used to evaluate anchors *)
 let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction) : unit =
   if !debug then Printf.printf "%s\n%!" ("Clock "^string_of_int s.clock^"|Epsilon active: " ^ print_active s.active);
-    
+
   match s.active with
   | [] -> () (* done advancing epsilon transitions *)
   | t::ac -> (* t: highest priority active thread *)
@@ -380,7 +380,7 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
           advance_epsilon c s o dir
        | SetRegisterToCP r ->
           (* modifying the capture regs of the current thread *)
-          t.capture_regs <- Regs.set_reg t.capture_regs r (Some s.cp) s.clock; 
+          t.capture_regs <- Regs.set_reg t.capture_regs r (Some s.cp) s.clock;
           t.pc <- t.pc + 1;
           advance_epsilon c s o dir
        | SetQuantToClock (q,b) ->
@@ -408,7 +408,7 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
           (* we reached a match but we want to write that into the oracle. we don't discard lower priority threads *)
           s.active <- ac;       (* no need to consider that thread anymore *)
           set_oracle o s.cp l;    (* writing to the oracle *)
-          advance_epsilon c s o dir (* we keep searching for more matches *) 
+          advance_epsilon c s o dir (* we keep searching for more matches *)
        | BeginLoop ->
        (* we need to set exit_allowed to false: now exiting a loop is forbidden according to JS semantics *)
           t.exit_allowed <- false;
@@ -435,7 +435,7 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
           advance_epsilon c s o dir
      end
 
-     
+
 (* modifies the state by consuming the next character  *)
 (* calls itself recursively until there are no more blocked threads *)
 let rec consume (s:interpreter_state): unit =
@@ -468,14 +468,14 @@ let null_interp (c:code) (s:interpreter_state) (o:oracle) (dir:direction): threa
     begin
       Printf.printf "At CP%d, CDN table:%s\n" (s.cp) (print_cdn_table s.cdn);
     end;
-  (* follow epsilon transitions *)  
+  (* follow epsilon transitions *)
   advance_epsilon c s o dir;
   if !debug then
     begin
       Printf.printf "%s\n%!" (print_blocked s.blocked);
     end;
   s.bestmatch
-  
+
 
 (** * Finding the top priority match in a bytecode automaton  *)
 (* This functions assumes that s.context already contains the correct characters *)
@@ -494,8 +494,8 @@ let rec find_match (c:code) (str:string) (s:interpreter_state) (o:oracle) (dir:d
     begin
       Printf.printf "At CP%d, CDN table:%s\n" (s.cp) (print_cdn_table s.cdn);
     end;
-  
-  (* follow epsilon transitions *)  
+
+  (* follow epsilon transitions *)
   advance_epsilon c s o dir;
   if !debug then
     begin
@@ -505,11 +505,11 @@ let rec find_match (c:code) (str:string) (s:interpreter_state) (o:oracle) (dir:d
   match s.blocked, s.context.nextchar with
   | [], _ -> s.bestmatch        (* no more surviving threads *)
   | _, None -> s.bestmatch      (* we reached the end of the string *)
-  | _, _ -> 
+  | _, _ ->
      (* advancing blocked threads *)
      consume s;
      (* resetting the processed, blocked sets and the CDN table *)
-     s.processed <- init_bpcset (size c); 
+     s.processed <- init_bpcset (size c);
      s.isblocked <- init_pcset (size c);
      s.cdn <- init_cdn();
      (* advancing the current position *)
@@ -520,7 +520,7 @@ let rec find_match (c:code) (str:string) (s:interpreter_state) (o:oracle) (dir:d
      (* recursive call *)
      find_match c str s o dir cdn
 
-          
+
 (** * Reconstructing Nullable + Values  *)
 (* when the winning thread of a match decided to go through the nullable path of a +, we might need to reconstruct any groups set during that nullable path *)
 (* for this, we need the bytecode of every nullable plus, and the AST of the regex we previously matched *)
@@ -537,7 +537,7 @@ let reconstruct_plus_groups (thread:thread) (ast:regex) (plus_bc:code Array.t) (
     | Re_alt (r1, r2) | Re_con (r1, r2) ->
        nulled_plus r1; nulled_plus r2
     | Re_capture (_,r1) -> nulled_plus r1
-    | Re_lookaround (lid,lk,r1) -> () 
+    | Re_lookaround (lid,lk,r1) -> ()
     | Re_anchor _ -> ()
     (* from shallowest to deepest plus: *)
     | Re_quant (nul,qid,quanttype,body) ->
@@ -572,7 +572,7 @@ let reconstruct_plus_groups (thread:thread) (ast:regex) (plus_bc:code Array.t) (
     | Re_alt (r1, r2) | Re_con (r1, r2) ->
        nulled_children r1 cdnt cp; nulled_children r2 cdnt cp
     | Re_capture (_,r1) -> nulled_children r1 cdnt cp
-    | Re_lookaround (lid,lk,r1) -> () 
+    | Re_lookaround (lid,lk,r1) -> ()
     | Re_anchor _ -> ()
     | Re_quant (nul,qid,quanttype,body) ->
        begin match (Regs.get_cp !quant qid) with
@@ -601,10 +601,10 @@ let reconstruct_plus_groups (thread:thread) (ast:regex) (plus_bc:code Array.t) (
   in
   nulled_plus ast;
   {pc = thread.pc; capture_regs = !capture; look_regs = !look; quant_regs = !quant; exit_allowed = thread.exit_allowed}
-  
+
 
 (** * Finds a match in an a bytecode automaton AND reconstructs the corresponding plus groups  *)
-  
+
 (* running the interpreter on some code, with a particular initial interpreter state *)
 (* also reconstructs the + groups *)
 let find_match_plus (c:code) (ast:regex) (plus_bc:code Array.t) (s:string) (o:oracle) (dir:direction) (start_cp:int) (capture:Regs.regs) (look:Regs.regs) (quant:Regs.regs) (start_clock:int) (cdn:cdns): thread option =
@@ -615,7 +615,7 @@ let find_match_plus (c:code) (ast:regex) (plus_bc:code Array.t) (s:string) (o:or
   let initstate = init_state c start_cp capture look quant start_clock (cp_context start_cp s dir) in
   let result = find_match c s initstate o dir cdn in
   (* reconstruct + groups *)
-  let full_result = 
+  let full_result =
     match result with
     | None -> None
     | Some thread -> Some (reconstruct_plus_groups thread ast plus_bc s o dir)
@@ -633,7 +633,7 @@ let find_match_plus (c:code) (ast:regex) (plus_bc:code Array.t) (s:string) (o:or
  *   let look = Regs.init_regs (maxlook+1) in
  *   let quant = Regs.init_regs (maxquant+1) in
  *   interp cr s o dir (init_cp dir (String.length s)) capture look quant 0 cdn
- * 
+ *
  * (\* for tests, sometimes we only want to know if there is a match *\)
  * let boolean_interp (cr:compiled_regex) (s:string) (o:oracle) (dir:direction) (cdn:cdns): bool =
  *   match (interp_default_init cr s o dir cdn) with
@@ -642,12 +642,12 @@ let find_match_plus (c:code) (ast:regex) (plus_bc:code Array.t) (s:string) (o:or
 
 
 (* the following functions work on the main regex, in its compiled_regex form *)
-  
+
 
 (** * Bulding the Oracle  *)
 (* we consider lookarounds by reverse order of their identifiers *)
 (* we do not need to do this for the main regex *)
-  
+
 let build_oracle (cr:compiled_regex) (str:string): oracle =
   let maxlook = max_lookaround cr.main_ast in
   let maxcap = max_group cr.main_ast in
@@ -706,7 +706,7 @@ let build_capture (cr:compiled_regex) (str:string) (o:oracle): (int Array.t) opt
             let direction = capture_direction looktype in
             let lookcdn = cr.look_cdns.(lid) in
             let lookast = cr.look_ast.(lid) in
-            let result = find_match_plus bytecode lookast cr.plus_bc str o direction cp !capture !look !quant 0 lookcdn in            
+            let result = find_match_plus bytecode lookast cr.plus_bc str o direction cp !capture !look !quant 0 lookcdn in
             begin match result with
             | None -> failwith "result expected from the oracle"
             | Some t ->
@@ -733,7 +733,7 @@ let build_capture (cr:compiled_regex) (str:string) (o:oracle): (int Array.t) opt
 
 (** * The Full matcher  *)
 (* builds the oracle, then matches the main expression and rebuilds missing capture groups, and filters *)
-     
+
 let matcher (cr:compiled_regex) (str:string) : (int Array.t) option =
   let o = build_oracle cr str in
   if !debug then
@@ -747,7 +747,7 @@ let full_match (raw:raw_regex) (str:string) : (int Array.t) option =
   let re = annotate raw in
   let cr = full_compilation re in
   matcher cr str
-              
+
 let get_linear_result (raw:raw_regex) (str:string) : string =
   let capop = full_match raw str in
   print_result (annotate raw) str capop

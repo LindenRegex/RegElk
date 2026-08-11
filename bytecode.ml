@@ -12,7 +12,7 @@ type register = int
 
 (* when the next label isn't directly specified, we expect a falltrough order of just going to the next instruction in the list *)
 type instruction =
-  | Consume of char_expectation                 
+  | Consume of char_expectation
   | Accept
   | Jmp of label
   | Fork of label * label
@@ -38,16 +38,16 @@ let get_instr (c:code) (pc:label) : instruction =
 
 let size (c:code) : int =
   Array.length c
-  
+
 (** * Bytecode Properties *)
-          
+
 (* Counting epsilon transitions. This will be useful to provide a bound when finding the next active thread list *)
 let nb_epsilon_transition (i:instruction) : int =
   match i with
   | Fork _ -> 2
   | Jmp _ | CheckOracle _ | NegCheckOracle _ | CheckNullable _ -> 1
-  | _ -> 0 
-           
+  | _ -> 0
+
 let nb_epsilon (c:code) : int =
   Array.fold_left (fun n i -> n + (nb_epsilon_transition i)) 0 c
 
@@ -70,11 +70,10 @@ let print_instruction (i:instruction) : string =
   | CheckNullable q -> "CheckNullable " ^ string_of_int q
   | AnchorAssertion a -> "AnchorAssertion " ^ print_anchor a
   | Fail -> "Fail"
-  
+
 let rec print_code (c:code) : string =
   let s = ref "" in
   for i=0 to (size c)-1 do
     s := !s ^ "\027[33m" ^ string_of_int i ^ ":\027[0m " ^ print_instruction (get_instr c i) ^ "\n"
   done;
   !s
-                               

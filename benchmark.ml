@@ -21,7 +21,7 @@ let old_v8_path = ref "~/v8/old/v8/out/x64.release/d8"
 let new_v8_path = ref "~/v8/new/v8/out/x64.release/d8"
 let v8_args = " --expose-gc --enable-experimental-regexp-engine "
 
-   
+
 (* where the results are stored *)
 let bench_dir = "results_bench/"
 (* where we store the argument to the d8 matcher *)
@@ -35,7 +35,7 @@ let irregexptimer = "scripts_bench/irregexptimer.js"
 let warmups = ref 10
 (* the number of times we perform each test *)
 let repetitions = ref 10
- 
+
 
 (* calling the matcher.native executable *)
 (* returning the rdtsc measuring *)
@@ -60,13 +60,13 @@ let get_time_newv8linear (r:raw_regex) (str:string): string =
   write_v8_params r str;
   let sys = !new_v8_path ^ v8_args ^ v8lineartimer in
   string_of_command(sys)
-  
+
 let get_time_irregexp (r:raw_regex) (str:string): string =
   write_v8_params r str;
   let sys = !old_v8_path ^ v8_args ^ irregexptimer in
   string_of_command(sys)
 
-  
+
 (* measures rdtsc time for each engine *)
 let get_time (e:engine) (r:raw_regex) (str:string) (impl:string): string =
   match e with
@@ -137,18 +137,18 @@ let exec_bench (bench: benchmark) : unit =
   | RB b -> run_regex_benchmark b
   | SB b -> run_string_benchmark b
 
-                  
+
 let main =
   debug := false;
   verbose := false;
 
   let bench_list = ref [] in
-  
+
   let speclist =
     [("-oldv8", Arg.Set_string old_v8_path, "old V8 path");
      ("-newv8", Arg.Set_string new_v8_path, "new V8 path");
      ("-warmups", Arg.Set_int warmups, "Number of Warmup Repetitions per iteration");
-     ("-repet", Arg.Set_int repetitions, "Number of Measured Repetitions");   
+     ("-repet", Arg.Set_int repetitions, "Number of Measured Repetitions");
     ] in
   let usage = "./benchmark.native [-oldv8 path_to_old_d8] [-newv8 path_to_new_d8] [-warmups 10] [-repet 10] benchmark list\n" in
   let full_usage = usage ^ "\nAvailable benchmarks: " ^ bench_names_string in

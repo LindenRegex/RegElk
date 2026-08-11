@@ -13,7 +13,7 @@ module Interpreter = Interpreter(List_Regs)
 module CMP = Tojs.Compare(Interpreter)
 
 let random_seed = ref 0
-      
+
 (* we restrict ourselves to a small alphabet *)
 let alphabet = ['a'; 'b'; '-']
 (* with a dash (non-ascii) to test word boundaries *)
@@ -29,7 +29,7 @@ let max_counted = 10
 let max_class = 7
 
 (** * Creating Random Regexes  *)
-   
+
 let random_char () : char =
   let idx = Random.int (List.length alphabet) in
   List.nth alphabet idx
@@ -43,13 +43,13 @@ let random_quant () : quantifier =
   | 4 -> QuestionMark
   | 5 -> LazyQuestionMark
   | _ -> failwith "random range error"
-       
+
 let random_counted_quant () : counted_quantifier =
   let min = Random.int max_counted in
   let greedy = Random.bool () in
   let max = if Random.bool() then None else Some (min + Random.int max_counted) in
   { min=min; max=max; greedy=greedy }
-          
+
 
 let random_look () : lookaround =
   match (Random.int 4) with
@@ -100,7 +100,7 @@ let random_character () : character =
   | 2 -> let g = random_group() in Group g
   | 3 -> let cl = random_class() in Class cl
   | 4 -> let cl = random_class() in NegClass cl
-  | _ -> failwith "random range error"       
+  | _ -> failwith "random range error"
 
 (* with a maximal number of recursion [depth] *)
 (* the [look] boolean specifies if lookarounds are allowed *)
@@ -146,8 +146,8 @@ let random_raw () : raw_regex =
 let random_string () : string =
   let size = (Random.int max_string) in
   String.init size (fun _ -> random_char())
-  
-  
+
+
 (** * The differential fuzzer itself  *)
 let fuzzer () : unit =
 
@@ -158,8 +158,8 @@ let fuzzer () : unit =
   let total_lnn = ref 0 in
   let total_ln = ref 0 in
   let total_timeout = ref 0 in
-  
-  for i = 0 to !max_tests do 
+
+  for i = 0 to !max_tests do
     let raw = random_raw() in
     let str = random_string() in
     let comp = CMP.compare_engines raw str in
@@ -189,7 +189,7 @@ let main =
 
   verbose := false;
   debug := false;
-  
+
   let speclist =
     [("-tests", Arg.Set_int max_tests, "Number of tests");
      ("-seed", Arg.Set_int random_seed, "Random seed");

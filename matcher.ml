@@ -10,8 +10,8 @@ open Charclasses
 open Flags
 open Regs
 
-module INTARRAY = Interpreter(Regs.Array_Regs) 
-module INTLIST = Interpreter(Regs.List_Regs) 
+module INTARRAY = Interpreter(Regs.Array_Regs)
+module INTLIST = Interpreter(Regs.List_Regs)
 module INTTREE = Interpreter(Regs.Map_Regs)
 
 let get_matcher (s:string) =
@@ -32,7 +32,7 @@ let get_build_capture (s:string) =
 
 (** * Measuring The OCaml engine execution  *)
 (* This executable is to be called directly by the benchmarks *)
-   
+
 (* Executing the OCaml linear engine on a regex and a string *)
 (* Expects exactly 4 arguments:
 - the regex
@@ -45,20 +45,20 @@ let input_str = ref ""
 let input_regex = ref ""
 let str_set = ref false
 let rgx_set = ref false
-let compare_js = ref false 
-   
+let compare_js = ref false
+
 (* fails if the regex is not correct *)
 let parse_raw (str:string) : raw_regex =
   let r:raw_regex = Regex_parser.main Regex_lexer.token (Lexing.from_string str) in
   assert (regex_wf r);
   r
 
-  
+
 let main =
   (* disabling debug/verbose output *)
   debug := false;
   verbose := false;
-  
+
   let regex = Sys.argv.(1) in
   let string = Sys.argv.(2) in
   let warmups = int_of_string(Sys.argv.(3)) in
@@ -93,6 +93,5 @@ let main =
     ignore(build_capture compiled_regex string o)
   done;
   let time = Timer.elapsed tstart in
-  
+
   Printf.printf ("%Li\n") time
- 

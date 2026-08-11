@@ -39,7 +39,7 @@ let int_of_opt (o: int option): int =
 
 let opt_of_int (i:int) : int option =
   if i < 0 then None else Some i
-   
+
 module Array_Regs =
   struct
     (* all the values stored are positive *)
@@ -212,7 +212,7 @@ module Map_Regs =
           a_cp.(k) <- cp;
           a_clk.(k) <- clk) regs.valmap;
       (a_cp, a_clk)
-            
+
     let to_string (regs:regs) : string =
       let s = ref "" in
       for c = 0 to regs.size do
@@ -222,5 +222,3 @@ module Map_Regs =
 
     let name : string = "MapRegs"
   end
-        
-           

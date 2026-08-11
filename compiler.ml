@@ -7,7 +7,7 @@ open Charclasses
 open Cdn
 
 (** * Registers *)
-   
+
 (* defining registers corresponding to a given capture group *)
 let start_reg (c:capture) : register = 2 * c
 let end_reg (c:capture) : register = (2*c) + 1
@@ -33,7 +33,7 @@ let rec tl_flatten (t:'x treelist) (tail:'x list): 'x list =
   | Concat (t1,t2) ->
      let l2 = tl_flatten t2 tail in
      tl_flatten t1 l2
-  
+
 (** * Regex to Bytecode Compilation  *)
 
 (* Compilation types *)
@@ -41,9 +41,9 @@ type comp_type =
   (* normal compilation type. making progress in the input string (Consume) is allowed *)
   | Progress
   (* Reconstructs the groups of a nulled regex. Recursively compile the nested +  *)
-  | ReconstructNulled  
-  
-  
+  | ReconstructNulled
+
+
 (* Recursively compiles a regex *)
 (* [fresh] is the next available instruction label *)
 (* also returns the next fresh label after compilation *)
@@ -69,7 +69,7 @@ let rec compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist 
      let (l1, f1) = compile r1 (fresh+1) ctype in
      let (l2, f2) = compile r2 (f1+1) ctype in
      (Leaf [Fork (fresh+1, f1+1)] @@ l1 @@ Leaf [Jmp f2] @@ l2, f2)
-     
+
   | Re_quant (nul, qid, quant, r1) when ctype = Progress ->
      (* progress compilation, consuming is allowed *)
 
@@ -86,7 +86,7 @@ let rec compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist 
                     else Fork (body_fresh+1, min_fresh) in
          (min_code @@ Leaf [SetQuantToClock (qid,false)] @@ body_code @@ Leaf [fork], body_fresh+1)
        end
-       
+
      (** particular case of the greedy CIN + *)
      else if (quant.min > 0 && quant.max = None && nul = CINullable && quant.greedy) then
        (* the body of the plus will have to be compiled separately *)
@@ -108,7 +108,7 @@ let rec compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist 
          (min_code @@ Leaf [Fork (min_fresh+1, body_fresh+2); SetQuantToClock (qid, false); BeginLoop] @@ body_code @@ Leaf [EndLoop; Fork (min_fresh+1, body_fresh+4); CheckNullable qid; SetQuantToClock (qid, true)],body_fresh+4)
        end
 
-       
+
      (** Generic Case  *)
      else
        begin
@@ -133,7 +133,7 @@ let rec compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist 
   (* when ctype = ReconstrutNulled, ie we only want to find the top-priority nullable path *)
   | Re_quant (nul, qid, quant, r1) ->
      if (quant.min = 0) then (Leaf [], fresh)
-     (* optional repetitions can't consume the empty string, so skip it *)  
+     (* optional repetitions can't consume the empty string, so skip it *)
      else if (nul = NonNullable) then
        (* you won't be able to null that expression *)
        (Leaf [Fail], fresh+1)
@@ -149,7 +149,7 @@ let rec compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist 
        (* we only have to compile one iteration, since only the last iteration matters and iterations don't consume *)
        let (l1, f1) = compile r1 (fresh+1) ReconstructNulled in
        (Leaf [SetQuantToClock (qid,false)] @@ l1, f1)
-         
+
   | Re_capture (cid, r1) ->
      let (l1, f1) = compile r1 (fresh+1) ctype in
      (Leaf [SetRegisterToCP (start_reg cid)] @@ l1 @@ Leaf [SetRegisterToCP (end_reg cid)], f1+1)
@@ -180,9 +180,9 @@ and repeat_optional (nb:int) (qid:quantid) (r:regex) (fresh:label) (ctype:comp_t
     let fork = if greedy then Fork(fresh+1,next_fresh)
                else Fork(next_fresh,fresh+1) in
     (Leaf [fork; SetQuantToClock (qid,false); BeginLoop] @@ body_code @@ Leaf [EndLoop] @@ next_code,next_fresh)
-  
-    
-                 
+
+
+
 (* adds an accept at the end of the bytecode *)
 let compile_to_bytecode (r:regex): code =
   let (c,_) = compile r 0 Progress in
@@ -202,7 +202,7 @@ let compile_reconstruct_nulled (r:regex): code =
   let (c,_) = compile r 0 ReconstructNulled in
   let full_c = tl_flatten c [Accept] in
   Array.of_list full_c
-  
+
 
 (** * Fully Compiled Regexes  *)
 (* to do ahead-of-time compilation, we define here the type of a compiled regex *)
@@ -211,7 +211,7 @@ let compile_reconstruct_nulled (r:regex): code =
 (* but if we want to benchmark against other engines that do all of the compilation ahead of time *)
 (* we should do the same *)
 type compiled_regex =
-  {                             
+  {
     (* data for the main expression *)
     main_ast: regex;
     main_bc: code;
@@ -265,7 +265,7 @@ let rec compile_extra_bytecode (r:regex) (c:compiled_regex): unit =
      c.look_build_bc.(lid) <- build_code;
      c.look_capture_bc.(lid) <- capture_code;
      compile_extra_bytecode body c
-  
+
 let full_compilation (r:regex) : compiled_regex =
   let maxlook = max_lookaround r in
   let maxquant = max_quant r in
@@ -285,4 +285,3 @@ let full_compilation (r:regex) : compiled_regex =
       plus_bc = plus_code } in
   compile_extra_bytecode r compiled; (* compile lookarounds, CIN & CDN *)
   compiled
-  

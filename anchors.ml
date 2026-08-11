@@ -13,7 +13,7 @@ type direction =
   | Forward
   | Backward
 
-   
+
 (** * Char Contexts  *)
 (* a context here describes the surrounding characters of a position (or None, if we reached the end/begin of the input) *)
 (* this surrounding context is what the interpreter needs to evaluate anchors, and advance threads that reached a CONSUME instruction *)
@@ -37,7 +37,7 @@ let print_context (ctx:char_context) : string =
     | Some x,None -> "{"^String.make 1 x^",None}"
     | Some x, Some y -> "{"^String.make 1 x^","^String.make 1 y^"}"
     end ^ "\n"
-    
+
 
 (** * Checking Anchor Assertions  *)
 
@@ -48,7 +48,7 @@ let is_boundary (ctx:char_context) : bool =
   | Some c, None -> is_ascii_word_character c
   | Some prev, Some next ->
      (is_ascii_word_character prev) <> (is_ascii_word_character next) (* xor *)
-                                    
+
 let is_satisfied (a:anchor) (ctx:char_context) (dir:direction): bool =
   match a,dir with
   | BeginInput,Forward -> ctx.prevchar = None

@@ -23,7 +23,7 @@ let str_set = ref false
 let rgx_set = ref false
 let compare_js = ref false
 let reg_implem = ref RegList    (* by default, use lists *)
-   
+
 (* fails if the regex is not correct *)
 let parse_raw (str:string) : raw_regex =
   let r:raw_regex = Regex_parser.main Regex_lexer.token (Lexing.from_string str) in
@@ -37,7 +37,7 @@ let appendix_regex : raw_regex =
   Raw_con(Raw_capture(raw_char('c')),raw_star(Raw_con(raw_char('a'),ahead)))
 
 let appendix_string : string = "caab"
-                              
+
 (* choosing the right functions depending on the register implementation *)
 let compare (ri:reg_impl) : raw_regex -> string -> bool =
   match ri with
@@ -61,7 +61,7 @@ let linear (ri:reg_impl) : raw_regex -> string -> string =
                INT.get_linear_result
 
 
-  
+
 let main =
 
   let speclist =
@@ -83,16 +83,16 @@ let main =
       Printf.printf "\027[36mEnter your regex:\027[0m\n";
       input_regex := read_line ()
     end;
-  
+
   let regex = parse_raw !input_regex in
   if !verbose then Printf.printf "\027[33mParsed Regex:\027[0m\n%s\n" (report_raw regex);
-  
+
   if not !str_set then begin
       Printf.printf "\027[36mEnter your string:\027[0m\n";
       input_str := read_line ()
     end;
 
-  
+
   if !compare_js then
     ignore ((compare !reg_implem) regex !input_str)
   else

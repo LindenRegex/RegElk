@@ -142,7 +142,7 @@ let nested_lookarounds : regex_benchmark =
     input_str = nested_look_reg_str;
   }
 
-  
+
 (** * Lookarounds String-Size  *)
 (* c (?: a (?= a* (?<=c (a* ) ) b ) )* *)
 let nested_la_reg = Raw_con(raw_char('c'),raw_star(Raw_con(raw_char('a'),Raw_lookaround(Lookahead,Raw_con(raw_star(raw_char('a')),Raw_con(Raw_lookaround(Lookbehind,Raw_con(raw_char('c'),Raw_capture(raw_star(raw_char('a'))))),raw_char('b')))))))
@@ -151,7 +151,7 @@ let nested_la_param_str = fun str_size ->
   "c" ^ String.make str_size 'a' ^ "b"
 
 let nested_look_str_conf =
-  [ {eng=OCaml; min_size=0; max_size=5000 }; 
+  [ {eng=OCaml; min_size=0; max_size=5000 };
     {eng=Irregexp; min_size=0; max_size=5000 } ]
 
 let nested_lookarounds_string : string_benchmark =

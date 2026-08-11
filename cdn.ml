@@ -15,11 +15,11 @@ open Anchors
 (** * CDN Table  *)
 (* For all Context-Dependent Nullable Plus, we need to remember *)
 (* when each of them is nullable at a given cp *)
-   
-module IntMap = Map.Make(struct type t = int let compare = compare end)        
+
+module IntMap = Map.Make(struct type t = int let compare = compare end)
 type cdn_table = unit IntMap.t
 (* when a unit is set for a given id, it means the corresponding quantifier is nullable *)
-               
+
 let init_cdn () : cdn_table =
   IntMap.empty
 
@@ -30,7 +30,7 @@ let cdn_get (cdn:cdn_table) (qid:quantid) : bool =
   match (IntMap.find_opt qid cdn) with
   | Some _ -> true
   | None -> false
-          
+
 (** * CDN formulas  *)
 (* the nullability of a regex may depend on the nullability of another quantifier *)
 (* or on whether or not a lookaround holds *)
@@ -56,9 +56,9 @@ let rec interpret_cdn (f:cdn_formula) (cp:int) (o:oracle) (t:cdn_table) (ctx:cha
   | CDN_look lid -> get_oracle o cp lid
   | CDN_neglook lid -> not (get_oracle o cp lid)
   | CDN_anchor a -> is_satisfied a ctx dir
-  
-                                
-(** * Compiling to CDN formulas *)                            
+
+
+(** * Compiling to CDN formulas *)
 (* generates the formula that expresses when a regex is nullable *)
 (* this minimizes the formula as we are building it *)
 let rec compile_cdnf (r:regex) : cdn_formula =
@@ -99,7 +99,7 @@ let rec compile_cdnf (r:regex) : cdn_formula =
      end
   | Re_anchor a -> CDN_anchor a
 
-    
+
 (** * Compiling all CDN formulas of a regex  *)
 (* here we define the set of formulas used by the interpreter to update, at each *)
 (* string position, which CDN plus is nullable *)
@@ -135,7 +135,7 @@ let rec compile_cdns_rec (r:regex) (c:cdns): cdns =
 let compile_cdns (r:regex): cdns =
   compile_cdns_rec r []
 
-     
+
 (** * Building the CDN Table  *)
 (* the interpreter performs this at each step to know which CDN is nullable *)
 let rec build_cdn (cdns:cdns) (cp:int) (o:oracle) (ctx:char_context) (dir:direction): cdn_table =
@@ -152,8 +152,8 @@ let print_cdn_table (table:cdn_table) : string =
   IntMap.fold (fun quantid _ str ->
       let s = string_of_int quantid in
       str ^ ", " ^ s
-    ) table "" 
-    
+    ) table ""
+
 let rec print_formula (f:cdn_formula) : string =
   match f with
   (* if formulas have been correctly minimized, you should never see True and False *)
