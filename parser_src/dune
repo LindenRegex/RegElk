@@ -1,0 +1,4 @@
+(ocamllex regex_lexer)
+
+(menhir
+ (modules regex_parser))
