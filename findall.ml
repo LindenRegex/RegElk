@@ -33,41 +33,17 @@ type match_result = int Array.t
 
 
 (** * The Find-All Engine  *)
-
 module type FINDALL = sig
-  val find_all : algo -> compiled_regex -> string -> match_result list
-  val full_find_all : algo -> raw_regex -> string -> match_result list
+  val find_all : algo -> raw_regex -> string -> match_result list
   val get_all_result : algo -> raw_regex -> string -> string
 end
 
 module FindAll (I:INTERP) : FINDALL = struct
   (* the boundaries of the entire match (group 0) *)
-let match_bounds (c:match_result) : (int * int) option =
-  match (I.get_op c (start_reg 0)), (I.get_op c (end_reg 0)) with
-  | Some mstart, Some mend -> Some (mstart, mend)
-  | _, _ -> None
-
-let print_all_matches (r:regex) (str:string) (l:match_result list) : string =
-  match l with
-  | [] -> "NoMatch\n"
-  | _ ->
-     let max_groups = max_group r in
-     let nb = List.length l in
-     let b = Buffer.create 256 in
-     Buffer.add_string b
-       (Printf.sprintf "%d match%s\n" nb (if nb = 1 then "" else "es"));
-     List.iteri
-       (fun i c ->
-         let position =
-           match match_bounds c with
-           | Some (mstart, mend) -> Printf.sprintf " [%d,%d]" mstart mend
-           | None -> ""
-         in
-         Buffer.add_string b (Printf.sprintf "\nMatch %d%s:\n" (i+1) position);
-         Buffer.add_string b (I.print_cap_regs c max_groups str))
-       l;
-     Buffer.contents b
-
+  let match_bounds (c:match_result) : (int * int) option =
+    match (I.get_op c (start_reg 0)), (I.get_op c (end_reg 0)) with
+    | Some mstart, Some mend -> Some (mstart, mend)
+    | _, _ -> None
 
   let shift_regs (offset:int) (regs:match_result) : match_result =
     Array.map (fun v -> if v < 0 then v else v + offset) regs
@@ -100,18 +76,33 @@ let print_all_matches (r:regex) (str:string) (l:match_result list) : string =
   let find_all_nimreg (_cr:compiled_regex) (_str:string) : match_result list =
     failwith "findall: algorithm 'nimreg' is not implemented yet"
 
-  let find_all (a:algo) : compiled_regex -> string -> match_result list =
-    match a with
-    | Naive -> find_all_naive
-    | NimReg -> find_all_nimreg
-  let full_find_all (a:algo) (raw:raw_regex) (str:string) : match_result list =
+  let find_all (a:algo) (raw:raw_regex) (str:string) : match_result list =
     if !verbose then
       Printf.printf "\027[33mFind-all algorithm:\027[0m %s\n" (string_of_algo a);
-    let re = annotate raw in
-    let cr = full_compilation re in
-    find_all a cr str
+    let cr = full_compilation (annotate raw) in
+    match a with
+    | Naive -> find_all_naive cr str
+    | NimReg -> find_all_nimreg cr str
 
   let get_all_result (a:algo) (raw:raw_regex) (str:string) : string =
-    print_all_matches (annotate raw) str (full_find_all a raw str)
+    match find_all a raw str with
+    | [] -> "NoMatch\n"
+    | l ->
+       let max_groups = max_group (annotate raw) in
+       let nb = List.length l in
+       let b = Buffer.create 256 in
+       Buffer.add_string b
+         (Printf.sprintf "%d match%s\n" nb (if nb = 1 then "" else "es"));
+       List.iteri
+         (fun i c ->
+           let position =
+             match match_bounds c with
+             | Some (mstart, mend) -> Printf.sprintf " [%d,%d]" mstart mend
+             | None -> ""
+           in
+           Buffer.add_string b (Printf.sprintf "\nMatch %d%s:\n" (i+1) position);
+           Buffer.add_string b (I.print_cap_regs c max_groups str))
+         l;
+       Buffer.contents b
 
 end
