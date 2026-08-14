@@ -1,6 +1,4 @@
-%{
-open Regex
-%}
+
 %token <char> CHAR
 %token <char> NZDIGIT
 %token ALT
