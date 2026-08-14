@@ -3,14 +3,11 @@
 (env
  (_
   (flags
-   (:standard -w -27-32-33-35-39 -warn-error -a))))
+   (:standard -warn-error -a))))
 
 (executables
  (names main tests fuzzer stats linearbaseline matcher benchmark)
  (libraries
   unix
   ocaml_intrinsics
-  core_bench
-  core
-  core_unix.command_unix
   yojson))
