@@ -4,6 +4,7 @@ open Bytecode
 open Compiler
 open Cdn
 open Interpreter
+open Findall
 open Tojs
 open Charclasses
 open Flags
@@ -23,7 +24,9 @@ let str_set = ref false
 let rgx_set = ref false
 let compare_js = ref false
 let reg_implem = ref RegList    (* by default, use lists *)
-
+let find_all = ref false
+let all_algo = ref default_algo
+   
 (* fails if the regex is not correct *)
 let parse_raw (str:string) : raw_regex =
   let r:raw_regex = Regex_parser.main Regex_lexer.token (Lexing.from_string str) in
@@ -60,6 +63,17 @@ let linear (ri:reg_impl) : raw_regex -> string -> string =
   | RegTree -> let module INT = Interpreter(Regs.Map_Regs) in
                INT.get_linear_result
 
+let linear_all (ri:reg_impl) : algo -> raw_regex -> string -> string =
+  match ri with
+  | RegArray -> let module INT = Interpreter(Regs.Array_Regs) in
+                let module ALL = Findall.FindAll(INT) in
+                ALL.get_all_result
+  | RegList -> let module INT = Interpreter(Regs.List_Regs) in
+               let module ALL = Findall.FindAll(INT) in
+               ALL.get_all_result
+  | RegTree -> let module INT = Interpreter(Regs.Map_Regs) in
+               let module ALL = Findall.FindAll(INT) in
+               ALL.get_all_result
 
 
 let main =
@@ -73,9 +87,13 @@ let main =
      ("-array", Arg.Unit (fun _ -> reg_implem := RegArray), "Use Array registers");
      ("-tree", Arg.Unit (fun _ -> reg_implem := RegTree), "Use Tree registers");
      ("-list", Arg.Unit (fun _ -> reg_implem := RegList), "Use List registers");
+     ("-all", Arg.Symbol (List.map fst algo_names,
+                          fun s -> all_algo := List.assoc s algo_names; find_all := true),
+      " Return all matches, using the given algorithm");
     ] in
 
-  let usage = "./main.native [-regex \"(b)|.*\"] [-string \"abc\"] [-v] [-d] [-cmp]" in
+  let usage = "./main.native [-regex \"(b)|.*\"] [-string \"abc\"] [-v] [-d] [-cmp] [-all "
+              ^ string_of_algo default_algo ^ "]" in
   Arg.parse speclist (fun _ -> ()) usage;
 
   (* if no regex or string were provided, ask the user to input them *)
@@ -95,5 +113,7 @@ let main =
 
   if !compare_js then
     ignore ((compare !reg_implem) regex !input_str)
+  else if !find_all then
+    Printf.printf "%s" ((linear_all !reg_implem) !all_algo regex !input_str)
   else
     Printf.printf "%s" ((linear !reg_implem) regex !input_str)

@@ -17,6 +17,8 @@ open Flags
 
 module type INTERP = sig
   val regs_name : unit -> string
+  val get_op : int array -> int -> int option
+  val print_cap_regs : int Array.t -> int -> string -> string
   val build_oracle : compiled_regex -> string -> oracle
   val build_capture : compiled_regex -> string -> oracle -> (int Array.t) option
   val matcher : compiled_regex -> string -> (int Array.t) option
