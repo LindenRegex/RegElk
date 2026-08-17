@@ -108,6 +108,29 @@ let rec has_potentially_capture_just_for_grouping (r:raw_regex) : bool =
       end
   | Raw_lookaround (_,r1) -> has_potentially_capture_just_for_grouping r1
 
+(* has dot lazy star *)
+let rec has_dls (r:raw_regex) : bool =
+  match r with
+  | Raw_empty | Raw_character _ | Raw_anchor _ -> false
+  | Raw_con(r1,r2) | Raw_alt(r1,r2) -> has_dls r1 || has_dls r2
+  | Raw_capture r1 -> has_dls r1
+  | Raw_lookaround (_,r1) -> false
+  | Raw_quant (q,r1) ->
+     begin match r1 with
+     | Raw_character Dot ->
+        begin match q with
+        | LazyStar -> true
+        | _ -> has_dls r1
+        end
+     | _ -> has_dls r1
+     end
+  | Raw_count (q,r1) ->
+     begin match r1 with
+     | Raw_character Dot ->
+        (q.min = 0 && q.max = None && q.greedy = false) || has_dls r1
+     | _ -> has_dls r1
+     end
+
 (** * Extracting literals from regexes  *)
 type literal =
   | Prefix of string
@@ -304,6 +327,7 @@ type support_stats = {
     mutable double_anchored:int;
     mutable captures_for_grouping:int;
     mutable no_captures:int;
+    mutable dls:int;
   }
 
 let init_stats () : support_stats =
@@ -312,7 +336,7 @@ let init_stats () : support_stats =
     null_quant=0; quant_groups=0; lookaround=0; nn=0; null_plus=0; lazy_nullplus=0; ml_behind=0;
     front_only_literal=0; back_only_literal=0; offset_literal=0;
         both_literal=0; exact_no_assert_literal=0; impossible_literal=0; exact_literal=0; exact_no_assert_and_no_groups_literal=0; anchored=0; reverse_anchored=0; double_anchored=0;
-    captures_for_grouping=0; no_captures=0; }
+    captures_for_grouping=0; no_captures=0; dls=0; }
 
 (* parsing a string for a regex *)
 let parse (str:string) (stats:support_stats): parse_result =
@@ -351,6 +375,7 @@ let parse (str:string) (stats:support_stats): parse_result =
           if (has_lazy_nullplus r) then stats.lazy_nullplus <- stats.lazy_nullplus + 1;
           if (memoryless_lookbehind r) then stats.ml_behind <- stats.ml_behind + 1;
           stats.parsed <- stats.parsed + 1;
+          if (has_dls r) then stats.dls <- stats.dls + 1;
           OK r
         with e -> Printf.printf "Error while analyzing regex %s: %s\n%!" str (Printexc.to_string e); stats.errors <- stats.errors + 1; ParseError
       end
@@ -404,6 +429,9 @@ let print_stats (s:support_stats) : string =
   "\nDouble Anchored Regexes: " ^ string_of_int s.double_anchored ^
   "\nRegexes with captures probably only for grouping: " ^ string_of_int s.captures_for_grouping ^
   "\nRegexes with no captures at all: " ^ string_of_int s.no_captures ^
+
+  "\n\nOTHER STATS:" ^
+  "\nDot Lazy Star: " ^ string_of_int s.dls ^
 
   "\n\nNUMBERS FOR FIGURE16:" ^
   "\nPARSED REGEXES / TOTAL REGEXES: " ^ string_of_int s.parsed ^ " / " ^ string_of_int s.total ^
