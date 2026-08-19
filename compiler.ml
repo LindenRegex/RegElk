@@ -215,6 +215,7 @@ type compiled_regex =
     (* data for the main expression *)
     main_ast: regex;
     main_bc: code;
+    reversed_bc: code;
     main_cdns: cdns;
     (* lookaround data *)
     look_types: lookaround Array.t; (* the type of each lookaround *)
@@ -277,9 +278,11 @@ let full_compilation (r:regex) : compiled_regex =
   let capture_look = Array.make (maxlook+1) empty_code in
   let plus_code = Array.make (maxquant+1) empty_code in
   let main_code = compile_to_bytecode (lazy_prefix r) in
+  let reversed_code = compile_to_bytecode (reverse_regex r) in
   let main_cdns = compile_cdns r in
   let compiled = {
-      main_ast = r; main_bc = main_code; main_cdns = main_cdns;
+      main_ast = r; main_bc = main_code; reversed_bc = reversed_code;
+      main_cdns = main_cdns;
       look_types = looktypes; look_cdns = lookcdns; look_ast = lookast;
       look_build_bc = build_look; look_capture_bc = capture_look;
       plus_bc = plus_code } in

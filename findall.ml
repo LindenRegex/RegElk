@@ -9,21 +9,22 @@ open Bytecode
 open Compiler
 open Interpreter
 open Flags
-
+open Oracle
+open Anchors
 
 (** * The Find-All Algorithms  *)
 
 type algo =
   | Naive
-  | NimReg
+  | TokenSkip
 
-let all_algos : algo list = [Naive; NimReg]
+let all_algos : algo list = [Naive; TokenSkip]
 let default_algo : algo = Naive
 
 let string_of_algo (a:algo) : string =
   match a with
   | Naive -> "naive"
-  | NimReg -> "nimreg"
+  | TokenSkip -> "tokenskip"
 
 let algo_names : (string * algo) list =
   List.map (fun a -> (string_of_algo a, a)) all_algos
@@ -48,6 +49,7 @@ module FindAll (I:INTERP) : FINDALL = struct
   let shift_regs (offset:int) (regs:match_result) : match_result =
     Array.map (fun v -> if v < 0 then v else v + offset) regs
 
+  (* Todo: don't copy the whole string each time *)
   let find_all_naive (cr:compiled_regex) (str:string) : match_result list =
     let len = String.length str in
     let rec loop (idx:int) (acc:match_result list) : match_result list =
@@ -72,9 +74,14 @@ module FindAll (I:INTERP) : FINDALL = struct
     loop 0 []
 
 
-  (** ** NimReg: TODO  *)
-  let find_all_nimreg (_cr:compiled_regex) (_str:string) : match_result list =
-    failwith "findall: algorithm 'nimreg' is not implemented yet"
+  let matcher_token_skip (cr:compiled_regex) (str:string) : match_result list =
+    let o = I.build_oracle cr str in
+    let tb = I.build_ts_table cr str o in
+    let ca = I.build_capture cr str o in
+    ca
+
+  let find_all_tokenskip (cr:compiled_regex) (str:string) : match_result list =
+    matcher_token_skip cr str
 
   let find_all (a:algo) (raw:raw_regex) (str:string) : match_result list =
     if !verbose then
@@ -82,7 +89,7 @@ module FindAll (I:INTERP) : FINDALL = struct
     let cr = full_compilation (annotate raw) in
     match a with
     | Naive -> find_all_naive cr str
-    | NimReg -> find_all_nimreg cr str
+    | TokenSkip -> find_all_tokenskip cr str
 
   let get_all_result (a:algo) (raw:raw_regex) (str:string) : string =
     match find_all a raw str with
@@ -98,7 +105,7 @@ module FindAll (I:INTERP) : FINDALL = struct
            let position =
              match match_bounds c with
              | Some (mstart, mend) -> Printf.sprintf " [%d,%d]" mstart mend
-             | None -> ""
+             | None -> failwith "false match report"
            in
            Buffer.add_string b (Printf.sprintf "\nMatch %d%s:\n" (i+1) position);
            Buffer.add_string b (I.print_cap_regs c max_groups str))
