@@ -63,8 +63,8 @@ let interpreter_tests () =
   let raw = Raw_con (Raw_quant (Star, raw_char 'a'), raw_char 'b') in
   let str1 = "aab" in
   let str2 = "aaa" in
-  assert (Interpreter.full_match raw str1 <> None);
-  assert (Interpreter.full_match raw str2 = None)
+  assert (Interpreter.full_match raw str1 <> []);
+  assert (Interpreter.full_match raw str2 = [])
 
 let build_oracle_tests () =
   let raw = Raw_con(Raw_con (Raw_lookaround (Lookahead, raw_char 'a'), Raw_lookaround (Lookbehind, Raw_con (raw_char 'a',raw_char 'b'))), Raw_lookaround(Lookbehind, Raw_empty)) in

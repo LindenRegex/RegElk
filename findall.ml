@@ -59,8 +59,8 @@ module FindAll (I:INTERP) : FINDALL = struct
         if !debug then
           Printf.printf "\027[35mFindall:\027[0m searching from %d in %S\n%!" idx remaining;
         match I.matcher cr remaining with
-        | None -> List.rev acc      (* no match left in the suffix: we are done *)
-        | Some regs ->
+        | [] -> List.rev acc      (* no match left in the suffix: we are done *)
+        | regs :: _ ->
            let regs = shift_regs idx regs in
            begin match match_bounds regs with
            | None -> List.rev acc
