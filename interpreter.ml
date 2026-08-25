@@ -209,35 +209,20 @@ type bpcset =
   {
    true_set: pcset;
    false_set: pcset;
-   true_threads: thread option Array.t;
-   false_threads: thread option Array.t;
   }
 
 let init_bpcset (bytecode_size: int) : bpcset =
-  { true_set = init_pcset(bytecode_size);
-    false_set = init_pcset(bytecode_size);
-    true_threads = Array.make bytecode_size None;
-    false_threads = Array.make bytecode_size None }
+  { true_set = init_pcset(bytecode_size); false_set = init_pcset(bytecode_size) }
 
-let bpc_add (bpcs:bpcset) (pc:label) (exit_bool:bool) (t:thread) : unit =
+let bpc_add (bpcs:bpcset) (pc:label) (exit_bool:bool) : unit =
   match exit_bool with
-  | true -> pc_add bpcs.true_set pc; bpcs.true_threads.(pc) <- Some t
-  | false -> pc_add bpcs.false_set pc; bpcs.false_threads.(pc) <- Some t
+  | true -> pc_add bpcs.true_set pc
+  | false -> pc_add bpcs.false_set pc
 
 let bpc_mem (bpcs:bpcset) (pc:label) (exit_bool:bool) : bool =
   match exit_bool with
   | true -> pc_mem bpcs.true_set pc
   | false -> pc_mem bpcs.false_set pc
-
-let bpc_find (bpcs:bpcset) (pc:label) (exit_bool:bool) : thread option =
-  match exit_bool with
-  | true -> bpcs.true_threads.(pc)
-  | false -> bpcs.false_threads.(pc)
-
-let bpc_remove (bpcs:bpcset) (t:thread) : unit =
-  match t.exit_allowed with
-  | true -> bpcs.true_set.(t.pc) <- false; bpcs.true_threads.(t.pc) <- None
-  | false -> bpcs.false_set.(t.pc) <- false; bpcs.false_threads.(t.pc) <- None
 
 
 
@@ -282,16 +267,6 @@ let init_state (c:code) (initcp:int) (initcap:Regs.regs) (initlook:Regs.regs) (i
     clock = initclk;
     cdn = init_cdn();
   }
-
-  (* Todo make this constant by using a different data structure *)
-let remove_thread (s:interpreter_state) (t:thread) : unit =
-  let was_blocked = List.exists (fun (blocked_thread, _) -> blocked_thread == t) s.blocked in
-  s.blocked <- List.filter (fun (blocked_thread, _) -> blocked_thread != t) s.blocked;
-  if was_blocked then s.isblocked.(t.pc) <- false;
-  begin match bpc_find s.processed t.pc t.exit_allowed with
-  | Some processed_thread when processed_thread == t -> bpc_remove s.processed t
-  | _ -> ()
-  end
 
 (** * Debugging Utilities  *)
 
@@ -441,21 +416,11 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
   | [] -> () (* done advancing epsilon transitions *)
   | t::ac -> (* t: highest priority active thread *)
     let i = get_instr c t.pc in
-      
-    let should_replace = findall &&  (takes_priority t (bpc_find s.processed t.pc t.exit_allowed)) in
-
-    (* killing the lower priority thread if it has already been processed *)
-    if (bpc_mem s.processed t.pc t.exit_allowed ) && not should_replace then 
-      begin
-        s.active <- ac;
-        advance_epsilon c s o dir findall table
-      end 
+    if (bpc_mem s.processed t.pc t.exit_allowed) then (* killing the lower priority thread if it has already been processed *)
+      begin s.active <- ac; advance_epsilon c s o dir findall table end
     else begin
-       if should_replace then
-        remove_thread s (Option.get (bpc_find s.processed t.pc t.exit_allowed));
-
        s.clock <- s.clock + 1;  (* augmenting the global clock *)
-       bpc_add s.processed t.pc t.exit_allowed t; (* adding the current pc being handled to the set of proccessed pcs *)
+       bpc_add s.processed t.pc t.exit_allowed; (* adding the current pc being handled to the set of proccessed pcs *)
        match i with
        | Consume ce -> (* adding the thread to the list of blocked thread if it isn't already there *)
           s.blocked <- add_thread t ce s.blocked s.isblocked; (* also updates isblocked *)
