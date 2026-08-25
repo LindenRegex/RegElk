@@ -99,14 +99,68 @@ let get_char (str:string) (cp:int) : char option =
   | Invalid_argument _ -> None    (* when reaching the end of the string *)
 
 
+(** * History Tree  *)
+(* Todo:  move the thread and history tree defenition to another file *)
+(* but the Reg.reg is undefined outside of this module *)
+type node = {
+  start_pos : int;
+  pc : int;                      (* only meaningful when not a leaf *)
+  mutable parent : node option;
+  mutable left : node option;
+  mutable right : node option;
+}
+
+type slot = Left | Right
+
+let holds (s : node option) (n : node) : bool =
+  match s with Some c -> c == n | None -> false
+
+let get_slot (p : node) (side : slot) : node option =
+  match side with Left -> p.left | Right -> p.right
+
+let set_slot (p : node) (side : slot) (v : node option) : unit =
+  match side with Left -> p.left <- v | Right -> p.right <- v
+
+let side_of (node : node) : (node * slot) option =
+  match node.parent with
+  | None -> None
+  | Some parent ->
+      if holds parent.left node then Some (parent, Left)
+      else if holds parent.right node then Some (parent, Right)
+      else failwith "Corrupt tree: node is not a child of its parent"
+
+let detach (node : node) : unit =
+  match side_of node with
+  | None -> ()
+  | Some (parent, side) ->
+      set_slot parent side None;
+      node.parent <- None
+
+let replace ~(old_node : node) ~(new_node : node) : unit =
+  match side_of old_node with
+  | None -> failwith "replace: node is a root"
+  | Some (parent, side) ->
+      detach new_node;
+      set_slot parent side (Some new_node);
+      old_node.parent <- None;
+      new_node.parent <- Some parent
+
+let attach ~(child : node) ~(parent : node) (side : slot) : unit =
+  detach child;
+  (match get_slot parent side with
+   | Some old_child -> detach old_child
+   | None -> ());
+  set_slot parent side (Some child);
+  child.parent <- Some parent
+
+
 (** * Threads  *)
 
 (* each thread has a program counter in the bytecode and a map of capture registers *)
 type thread =
   {
     mutable pc: int;
-    start_pos:  int;
-    mutable history: int Stack.t;    (* the history of visited pcs *)
+    history_node: node;
     mutable capture_regs: Regs.regs; (* cp and clock for each capture group *)
     mutable look_regs: Regs.regs;    (* cp and clock for each lookaround *)
     mutable quant_regs: Regs.regs;   (* cp (if nulled) and clock for each quantifier *)
@@ -114,7 +168,8 @@ type thread =
   }
 
 let init_thread (initcap:Regs.regs) (initlook:Regs.regs) (initquant:Regs.regs) (start_pos:int): thread =
-  { pc = 0; start_pos = start_pos; history = Stack.create (); capture_regs = initcap; look_regs = initlook; quant_regs = initquant; exit_allowed = false }
+  let history_node = { start_pos = start_pos; pc = 0; parent = None; left = None; right = None } in
+  { pc = 0; history_node = history_node; capture_regs = initcap; look_regs = initlook; quant_regs = initquant; exit_allowed = false }
 
 (** * PC Sets  *)
 
@@ -136,9 +191,7 @@ let pc_mem (pcs:pcset) (pc:label) : bool =
   pcs.(pc)
 
 let takes_priority (new_thread :thread) (old_thread:thread option) : bool =
-  match old_thread with
-  | None -> true
-  | Some old_thread -> new_thread.start_pos < old_thread.start_pos
+  true
 
 (* adds a thread and char at the head of a blocked list only if it's not already in *)
 (* modifies the pcset in place *)
@@ -388,8 +441,6 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
   | [] -> () (* done advancing epsilon transitions *)
   | t::ac -> (* t: highest priority active thread *)
     let i = get_instr c t.pc in
-    if findall then
-      Stack.push t.pc t.history;
       
     let should_replace = findall &&  (takes_priority t (bpc_find s.processed t.pc t.exit_allowed)) in
 
@@ -420,8 +471,7 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
        | Fork (x,y) ->           (* x has higher priority *)
           t.pc <- y;
           s.active <- {pc = x;
-                       start_pos = t.start_pos;
-                       history = t.history;
+                       history_node = t.history_node;
                        capture_regs = Regs.copy t.capture_regs;
                        look_regs = Regs.copy t.look_regs;
                        quant_regs = Regs.copy t.quant_regs;
@@ -664,7 +714,7 @@ let reconstruct_plus_groups (thread:thread) (ast:regex) (plus_bc:code Array.t) (
        end
   in
   nulled_plus ast;
-  {pc = thread.pc; start_pos = thread.start_pos; history = thread.history; capture_regs = !capture; look_regs = !look; quant_regs = !quant; exit_allowed = thread.exit_allowed}
+  {pc = thread.pc; history_node = thread.history_node; capture_regs = !capture; look_regs = !look; quant_regs = !quant; exit_allowed = thread.exit_allowed}
 
 
 (** * Finds a match in an a bytecode automaton AND reconstructs the corresponding plus groups  *)
