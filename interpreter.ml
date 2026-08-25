@@ -103,8 +103,8 @@ let get_char (str:string) (cp:int) : char option =
 (* Todo:  move the thread and history tree defenition to another file *)
 (* but the Reg.reg is undefined outside of this module *)
 type node = {
-  start_pos : int;
   pc : int;                      (* only meaningful when not a leaf *)
+  mutable start_pos : int;
   mutable parent : node option;
   mutable left : node option;
   mutable right : node option;
@@ -153,6 +153,9 @@ let attach ~(child : node) ~(parent : node) (side : slot) : unit =
   set_slot parent side (Some child);
   child.parent <- Some parent
 
+let compare_history (new_node : node) (old_node : node) : bool =
+  new_node.start_pos > old_node.start_pos
+
 
 (** * Threads  *)
 
@@ -160,7 +163,7 @@ let attach ~(child : node) ~(parent : node) (side : slot) : unit =
 type thread =
   {
     mutable pc: int;
-    history_node: node;
+    mutable history_node: node;
     mutable capture_regs: Regs.regs; (* cp and clock for each capture group *)
     mutable look_regs: Regs.regs;    (* cp and clock for each lookaround *)
     mutable quant_regs: Regs.regs;   (* cp (if nulled) and clock for each quantifier *)
@@ -168,27 +171,40 @@ type thread =
   }
 
 let init_thread (initcap:Regs.regs) (initlook:Regs.regs) (initquant:Regs.regs) (start_pos:int): thread =
-  let history_node = { start_pos = start_pos; pc = 0; parent = None; left = None; right = None } in
+  let history_node = { start_pos = start_pos; pc = -1; parent = None; left = None; right = None } in
   { pc = 0; history_node = history_node; capture_regs = initcap; look_regs = initlook; quant_regs = initquant; exit_allowed = false }
 
+
+let get_nodes (threads: thread list) : node list =
+  List.map (fun t -> t.history_node) threads
+let rec set_start_pos (nodes: node list) :unit = 
+  match nodes with
+  | [] -> ()
+  | n :: ns ->
+    if n.start_pos = -1 then n.start_pos <- (Option.get n.parent).start_pos;
+    let ns = match n.right with Some r -> r :: ns | None -> ns in
+    let ns = match n.left  with Some l -> l :: ns | None -> ns in
+    set_start_pos ns
 (** * PC Sets  *)
 
 (* for each PC of the bytecode, we want to track if, in a step of the interpreter, this PC has already been processed *)
 (* this prevents us from handling the same pc twice: only the top priority thread with that pc should be handled *)
 (* We use a mutable array of booleans, since we know the size of the bytecode *)
-type pcset = bool Array.t
+type pcset = node option Array.t
 
 let init_pcset (bytecode_size: int) : pcset =
   assert (bytecode_size > 0);
-  Array.make bytecode_size false
+  Array.make bytecode_size None
 
 (* add a pc to the set after it has been processed *)
-let pc_add (pcs:pcset) (pc:label) : unit =
-  pcs.(pc) <- true
+let pc_add (pcs:pcset) (pc:label) (node:node): unit =
+  pcs.(pc) <- Some node
 
 (* check if a pc has been processed already *)
 let pc_mem (pcs:pcset) (pc:label) : bool =
-  pcs.(pc)
+  match pcs.(pc) with
+  | Some _ -> true
+  | None -> false
 
 let takes_priority (new_thread :thread) (old_thread:thread option) : bool =
   true
@@ -198,7 +214,7 @@ let takes_priority (new_thread :thread) (old_thread:thread option) : bool =
 let add_thread (t:thread) (x:char_expectation) (current:(thread*char_expectation) list) (inset:pcset) : (thread*char_expectation) list =
   if (pc_mem inset t.pc) then current
   else begin
-      pc_add inset t.pc;
+      pc_add inset t.pc t.history_node;
       (t,x)::current
     end
 
@@ -214,17 +230,20 @@ type bpcset =
 let init_bpcset (bytecode_size: int) : bpcset =
   { true_set = init_pcset(bytecode_size); false_set = init_pcset(bytecode_size) }
 
-let bpc_add (bpcs:bpcset) (pc:label) (exit_bool:bool) : unit =
+let bpc_add (bpcs:bpcset) (pc:label) (exit_bool:bool) (node:node) : unit =
   match exit_bool with
-  | true -> pc_add bpcs.true_set pc
-  | false -> pc_add bpcs.false_set pc
+  | true -> pc_add bpcs.true_set pc node
+  | false -> pc_add bpcs.false_set pc node
 
 let bpc_mem (bpcs:bpcset) (pc:label) (exit_bool:bool) : bool =
   match exit_bool with
   | true -> pc_mem bpcs.true_set pc
   | false -> pc_mem bpcs.false_set pc
 
-
+let get_history_node (bpcs:bpcset) (pc:label) (exit_bool:bool) : node option =
+  match exit_bool with
+  | true -> bpcs.true_set.(pc)
+  | false -> bpcs.false_set.(pc)
 
 (** * Interpreter States  *)
 
@@ -409,7 +428,7 @@ let filter_reset (r:regex) (capture:Regs.regs) (look:Regs.regs) (quant:Regs.regs
 (* modifies the state by advancing all threads along epsilon transitions *)
 (* calls itself recursively until there are no more active threads *)
 (* the direction is only used to evaluate anchors *)
-let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction) (findall:bool) (table:int Array.t) : unit =
+let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction) (findall:bool) : unit =
   if !debug then Printf.printf "%s\n%!" ("Clock "^string_of_int s.clock^"|Epsilon active: " ^ print_active s.active);
 
   match s.active with
@@ -417,22 +436,42 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
   | t::ac -> (* t: highest priority active thread *)
     let i = get_instr c t.pc in
     if (bpc_mem s.processed t.pc t.exit_allowed) then (* killing the lower priority thread if it has already been processed *)
-      begin s.active <- ac; advance_epsilon c s o dir findall table end
+      begin s.active <- ac;
+        let old_node = Option.get (get_history_node s.processed t.pc t.exit_allowed) in
+        if compare_history t.history_node old_node then
+          replace ~old_node:old_node ~new_node:t.history_node;
+        advance_epsilon c s o dir findall
+      end
     else begin
        s.clock <- s.clock + 1;  (* augmenting the global clock *)
-       bpc_add s.processed t.pc t.exit_allowed; (* adding the current pc being handled to the set of proccessed pcs *)
+       bpc_add s.processed t.pc t.exit_allowed t.history_node; (* adding the current pc being handled to the set of proccessed pcs *)
+
+       let new_node = { start_pos = -1; pc = t.pc; parent = Some t.history_node; left = None; right = None } in
+       if t.history_node.left  = None then
+        t.history_node.left <- Some new_node
+       else
+        t.history_node.right <- Some new_node;
+       t.history_node <- new_node;
+
        match i with
        | Consume ce -> (* adding the thread to the list of blocked thread if it isn't already there *)
           s.blocked <- add_thread t ce s.blocked s.isblocked; (* also updates isblocked *)
           s.active <- ac;
-          advance_epsilon c s o dir findall table
+          advance_epsilon c s o dir findall
        | Accept ->             (* updates the best match and don't consider the remain active threads *)
-          s.active <- [];
-          s.bestmatch <- Some t;
-          () (* no recursive call *)
+          if findall then begin
+            s.active <- ac;
+            s.bestmatch <- Some t;
+            advance_epsilon c s o dir findall
+          end
+          else begin
+            s.active <- [];
+            s.bestmatch <- Some t;
+            () (* no recursive call *)
+          end
        | Jmp x ->
           t.pc <- x;
-          advance_epsilon c s o dir findall table
+          advance_epsilon c s o dir findall
        | Fork (x,y) ->           (* x has higher priority *)
           t.pc <- y;
           s.active <- {pc = x;
@@ -441,19 +480,19 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
                        look_regs = Regs.copy t.look_regs;
                        quant_regs = Regs.copy t.quant_regs;
                        exit_allowed = t.exit_allowed}::s.active;
-          advance_epsilon c s o dir findall table
+          advance_epsilon c s o dir findall
        | SetRegisterToCP r ->
           (* modifying the capture regs of the current thread *)
           t.capture_regs <- Regs.set_reg t.capture_regs r (Some s.cp) s.clock;
           t.pc <- t.pc + 1;
-          advance_epsilon c s o dir findall table
+          advance_epsilon c s o dir findall
        | SetQuantToClock (q,b) ->
           (* saving the current cp if we are nulling a + *)
           let ocp = if b then (Some s.cp) else None in
           (* adding the last iteration clock *)
           t.quant_regs <- Regs.set_reg t.quant_regs q ocp s.clock;
           t.pc <- t.pc + 1;
-          advance_epsilon c s o dir findall table
+          advance_epsilon c s o dir findall
        | CheckOracle l ->
           if (get_oracle o s.cp l)
           then begin
@@ -462,41 +501,41 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
               t.look_regs <- Regs.set_reg t.look_regs l (Some s.cp) s.clock;
             end
           else s.active <- ac;  (* killing the thread *)
-          advance_epsilon c s o dir findall table
+          advance_epsilon c s o dir findall
        | NegCheckOracle l ->
           if (get_oracle o s.cp l)
           then s.active <- ac   (* killing the thread *)
           else t.pc <- t.pc + 1;(* keeping the thread alive *)
-          advance_epsilon c s o dir findall table
+          advance_epsilon c s o dir findall
        | WriteOracle l ->
           (* we reached a match but we want to write that into the oracle. we don't discard lower priority threads *)
           s.active <- ac;       (* no need to consider that thread anymore *)
           set_oracle o s.cp l;    (* writing to the oracle *)
-          advance_epsilon c s o dir findall table  (* we keep searching for more matches *)
+          advance_epsilon c s o dir findall  (* we keep searching for more matches *)
        | BeginLoop ->
        (* we need to set exit_allowed to false: now exiting a loop is forbidden according to JS semantics *)
           t.exit_allowed <- false;
           t.pc <- t.pc + 1;
-          advance_epsilon c s o dir findall table
+          advance_epsilon c s o dir findall
        | EndLoop ->
           (* this transition is only possible if we didn't begin this loop during this epsilon transition phase *)
           begin match t.exit_allowed with
-          | true -> t.pc <- t.pc+1; advance_epsilon c s o dir findall table
-          | false -> s.active <- ac; advance_epsilon c s o dir findall table (* killing the current thread *)
+          | true -> t.pc <- t.pc+1; advance_epsilon c s o dir findall
+          | false -> s.active <- ac; advance_epsilon c s o dir findall (* killing the current thread *)
           end
        | CheckNullable qid ->
           if (cdn_get s.cdn qid)
           then t.pc <- t.pc+1   (* keeping the thread alive *)
           else s.active <- ac;  (* killing the thread *)
-          advance_epsilon c s o dir findall table
+          advance_epsilon c s o dir findall
        | AnchorAssertion a ->
           if (is_satisfied a s.context dir)
           then t.pc <- t.pc+1   (* keeping the thread alive *)
           else s.active <- ac;  (* killing the thread *)
-          advance_epsilon c s o dir findall table
+          advance_epsilon c s o dir findall
        | Fail ->
           s.active <- ac;       (* killing the current thread *)
-          advance_epsilon c s o dir findall table
+          advance_epsilon c s o dir findall
      end
 
 
@@ -533,7 +572,7 @@ let null_interp (c:code) (s:interpreter_state) (o:oracle) (dir:direction): threa
       Printf.printf "At CP%d, CDN table:%s\n" (s.cp) (print_cdn_table s.cdn);
     end;
   (* follow epsilon transitions *)
-  advance_epsilon c s o dir false [||];
+  advance_epsilon c s o dir false;
   if !debug then
     begin
       Printf.printf "%s\n%!" (print_blocked s.blocked);
@@ -560,7 +599,14 @@ let rec find_match (c:code) (main_ast:regex) (str:string) (s:interpreter_state) 
     end;
 
   (* follow epsilon transitions *)
-  advance_epsilon c s o dir findall table;
+  let starting_nodes = get_nodes s.active in
+  advance_epsilon c s o dir findall;
+  set_start_pos starting_nodes;
+  table.(s.cp) <- (match s.bestmatch with
+  | None -> -1
+  | Some t -> t.history_node.start_pos);
+
+  
   if !debug then
     begin
       Printf.printf "%s\n%!" (print_blocked s.blocked);
