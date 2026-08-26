@@ -643,7 +643,8 @@ let rec find_match (c:code) (main_ast:regex) (str:string) (s:interpreter_state) 
 
   (* follow epsilon transitions *)
   let previous_ends = get_nodes s.active in
-  s.bestmatch <- None;
+  if findall then
+    s.bestmatch <- None;
   advance_epsilon c s o dir findall;
 
   if findall then begin
