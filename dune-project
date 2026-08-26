@@ -1,4 +1,5 @@
-(lang dune 3.0)
+(lang dune 3.7)
 (name regelk)
 (generate_opam_files true)
+(map_workspace_root false)
 (using menhir 2.1)

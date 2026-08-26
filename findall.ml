@@ -77,6 +77,11 @@ module FindAll (I:INTERP) : FINDALL = struct
   let matcher_token_skip (cr:compiled_regex) (str:string) : match_result list =
     let o = I.build_oracle cr str in
     let tb = I.build_ts_table cr str o in
+    Printf.printf "this is the table:\n";
+    for i = 0 to (Array.length tb) - 1 do
+      Printf.printf "%d " tb.(i)
+    done;
+    Printf.printf "\n";
     let ca = I.build_capture cr str o in
     ca
 

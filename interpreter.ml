@@ -156,6 +156,46 @@ let attach ~(child : node) ~(parent : node) (side : slot) : unit =
 let compare_history (new_node : node) (old_node : node) : bool =
   new_node.start_pos > old_node.start_pos
 
+let g_tee  = "\xe2\x94\x9c\xe2\x94\x80\xe2\x94\x80 "   (* |--  *)
+let g_end  = "\xe2\x94\x94\xe2\x94\x80\xe2\x94\x80 "   (* `--  *)
+let g_bar  = "\xe2\x94\x82   "                          (* |    *)
+let g_gap  = "    "
+
+let print_forest ?(oc = stdout)
+    (roots : node list) : unit =
+  let label n = Printf.sprintf "pc=%d,start=%d" n.pc n.start_pos in
+  let children n =
+    match n.left, n.right with
+    | Some l, Some r -> [ ("", l); ("", r) ]
+    | Some l, None   -> [ ("L ", l) ]
+    | None,   Some r -> [ ("R ", r) ]
+    | None,   None   -> []
+  in
+  let rec render ~prefix ~branch ~cont n =
+    Printf.fprintf oc "%s%s%s\n" prefix branch (label n);
+    let kids = children n in
+    let last = List.length kids - 1 in
+    let prefix = prefix ^ cont in
+    List.iteri
+      (fun i (t, c) ->
+        let is_last = i = last in
+        render ~prefix
+          ~branch:(if is_last then g_end else g_tee)
+          ~cont:(if is_last then g_gap else g_bar)
+          c)
+      kids
+  in
+  match roots with
+  | [] -> Printf.fprintf oc "<empty forest>\n"
+  | roots ->
+      let n = List.length roots in
+      let last = n - 1 in
+      List.iteri
+        (fun i r ->
+          let is_last = i = last in
+          render ~prefix:"" ~branch:(if is_last then g_end else g_tee)
+            ~cont:(if is_last then g_gap else g_bar) r)
+        roots
 
 (** * Threads  *)
 
@@ -264,6 +304,7 @@ type interpreter_state =
     mutable context: char_context;             (* prev and next character at the current position *)
     mutable clock: int;                 (* global clock *)
     mutable cdn: cdn_table;             (* nullability table for cdn + *)
+    mutable starting_nodes: node list;
   }
 
 (* initializing the context *)
@@ -276,8 +317,9 @@ let cp_context (cp:int) (str:string) (dir:direction) : char_context =
   | Backward -> { prevchar = nextop ; nextchar = prevop }
 
 let init_state (c:code) (initcp:int) (initcap:Regs.regs) (initlook:Regs.regs) (initquant:Regs.regs) (initclk:int) (initctx:char_context) : interpreter_state =
+  let initial_thread = init_thread initcap initlook initquant initcp in
   { cp = initcp;
-    active = [init_thread initcap initlook initquant initcp];
+    active = [initial_thread];
     processed = init_bpcset (size c);
     blocked = [];
     isblocked = init_pcset (size c);
@@ -285,6 +327,7 @@ let init_state (c:code) (initcp:int) (initcap:Regs.regs) (initlook:Regs.regs) (i
     context = initctx;
     clock = initclk;
     cdn = init_cdn();
+    starting_nodes = [initial_thread.history_node];
   }
 
 (** * Debugging Utilities  *)
@@ -599,12 +642,18 @@ let rec find_match (c:code) (main_ast:regex) (str:string) (s:interpreter_state) 
     end;
 
   (* follow epsilon transitions *)
-  let starting_nodes = get_nodes s.active in
+  let previous_ends = get_nodes s.active in
+  s.bestmatch <- None;
   advance_epsilon c s o dir findall;
-  set_start_pos starting_nodes;
-  table.(s.cp) <- (match s.bestmatch with
-  | None -> -1
-  | Some t -> t.history_node.start_pos);
+
+  if findall then begin
+    set_start_pos previous_ends;
+    if !debug then
+      print_forest s.starting_nodes;
+    table.(s.cp) <- (match s.bestmatch with
+    | None -> -1
+    | Some t -> t.history_node.start_pos);
+  end;
 
   
   if !debug then
@@ -634,13 +683,12 @@ let rec find_match (c:code) (main_ast:regex) (str:string) (s:interpreter_state) 
       let maxcap = max_group main_ast in
       let maxquant = max_quant main_ast in
 
-      let direction = Backward in
-      let start_cp = init_cp direction (String.length str) in
       let capture = Regs.init_regs (2*maxcap+2) in
       let lookmem = Regs.init_regs (maxlook+1) in
       let quant = Regs.init_regs (maxquant+1) in
       
-      let new_thread = init_thread capture lookmem quant start_cp in
+      let new_thread = init_thread capture lookmem quant s.cp in
+      s.starting_nodes <- new_thread.history_node :: s.starting_nodes;
       s.active <- new_thread::s.active;
      end;
      find_match c main_ast str s o dir cdn findall table
