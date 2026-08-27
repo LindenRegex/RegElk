@@ -48,51 +48,57 @@ type comp_type =
 (* [fresh] is the next available instruction label *)
 (* also returns the next fresh label after compilation *)
 (* if the option progress is false, then this generates code that cannot make progress in the string *)
-let rec compile_with_rev (r:regex) (fresh:label) (nextrev:label) (ctype:comp_type): (instruction treelist * label) * (instruction treelist * label)   =
+let rec compile_rev (r:regex) (fresh:label) (nextrev:label) (ctype:comp_type) (priority:int Array.t): label * (instruction treelist * label)   =
   match r with
-  | Re_empty -> ((Leaf [], fresh), (Leaf [], nextrev))
+  | Re_empty -> (fresh, (Leaf [], nextrev))
   | Re_character c ->
      if (ctype = ReconstructNulled) then
-      ((Leaf [Fail], fresh+1), (Leaf [Fail], nextrev-1))
+      ( fresh+1, (Leaf [Fail], nextrev-1))
      else
        begin match c with
-       | Char ch -> ((Leaf [Consume (Single ch)], fresh+1), (Leaf [Consume (Single ch)], nextrev-1))
-       | Dot -> ((Leaf [Consume All], fresh+1), (Leaf [Consume All], nextrev-1))
-       | Group g -> ((Leaf [Consume (Ranges (group_to_range g))], fresh+1), (Leaf [Consume (Ranges (group_to_range g))], nextrev-1))
-       | Class cl -> ((Leaf [Consume (Ranges (class_to_range cl))], fresh+1), (Leaf [Consume (Ranges (class_to_range cl))], nextrev-1))
-       | NegClass cl -> ((Leaf [Consume (Ranges (range_neg (class_to_range cl)))], fresh+1), (Leaf [Consume (Ranges (range_neg (class_to_range cl)))], nextrev-1))
+       | Char ch -> (fresh+1, (Leaf [Consume (Single ch)], nextrev-1))
+       | Dot -> (fresh+1, (Leaf [Consume All], nextrev-1))
+       | Group g -> (fresh+1, (Leaf [Consume (Ranges (group_to_range g))], nextrev-1))
+       | Class cl -> (fresh+1, (Leaf [Consume (Ranges (class_to_range cl))], nextrev-1))
+       | NegClass cl -> (fresh+1, (Leaf [Consume (Ranges (range_neg (class_to_range cl)))], nextrev-1))
        end
   | Re_con (r1, r2) ->
-     let ((l1, f1),(l1_rev,n1)) = compile_with_rev r1 fresh nextrev ctype in
-     let ((l2, f2),(l2_rev,n2)) = compile_with_rev r2 f1 n1 ctype in
-     ((l1 @@ l2, f2), (l2_rev @@ l1_rev, n2))
+     let (f1,(l1_rev,n1)) = compile_rev r1 fresh nextrev ctype priority in
+     let (f2,(l2_rev,n2)) = compile_rev r2 f1 n1 ctype priority in
+     (f2, (l2_rev @@ l1_rev, n2))
   | Re_alt (r1, r2) ->
-     let ((l1, f1),(l1_rev,n1)) = compile_with_rev r1 (fresh+1) nextrev ctype in
-     let ((l2, f2),(l2_rev,n2)) = compile_with_rev r2 (f1+1) (n1-1) ctype in
-     ((Leaf [Fork (fresh+1, f1+1)] @@ l1 @@ Leaf [Jmp f2] @@ l2, f2),
-      (Leaf [Fork (n1+1, n2+1)] @@ l2_rev @@ Leaf [Jmp (nextrev+1)] @@ l1_rev, n2-1))
+     let (f1,(l1_rev,n1)) = compile_rev r1 (fresh+1) nextrev ctype priority in
+     let (f2,(l2_rev,n2)) = compile_rev r2 (f1+1) (n1-1) ctype priority in
+     priority.(nextrev) <- nextrev - 1;
+     (f2, (Leaf [Fork (n1+1, n2+1)] @@ l2_rev @@ Leaf [Jmp (nextrev+1)] @@ l1_rev, n2-1))
 
   | Re_quant (_, qid, quant, r1) when ctype = Progress ->
      (* removed special cases for now for simplicity also assumed no min or max are used*)
        
-    let ((iter_code, iter_fresh),(iter_code_rev, iter_fresh_rev)) = compile_with_rev r1 (fresh+3) (nextrev-2) ctype in
-    let fork = if quant.greedy then Fork(fresh+1, iter_fresh+2)
-                else Fork (iter_fresh+2,fresh+1) in
+    let (iter_fresh,(iter_code_rev, iter_fresh_rev)) = compile_rev r1 (fresh+3) (nextrev-2) ctype priority in
+    let fork = if quant.greedy then Fork(iter_fresh_rev-1, nextrev+1)
+                else Fork (nextrev+1,iter_fresh_rev-1) in
+    priority.(iter_fresh_rev-2) <- nextrev;
     (* priority doesnt matter in reverse *)
-    ((Leaf [fork; SetQuantToClock (qid, false); BeginLoop] @@ iter_code @@ Leaf [EndLoop; Jmp fresh],iter_fresh+2),
-      (Leaf [fork; SetQuantToClock (qid, false); BeginLoop] @@ iter_code_rev @@ Leaf [EndLoop; Jmp (iter_fresh_rev-2)],iter_fresh_rev-3))
+    (iter_fresh+2,(Leaf [fork; SetQuantToClock (qid, false); BeginLoop] @@ iter_code_rev @@ Leaf [EndLoop; Jmp (iter_fresh_rev-2)],iter_fresh_rev-3))
        
   | Re_quant (_, _, _,_) ->
-    ((Leaf [], fresh), (Leaf [], nextrev))
+    (fresh, (Leaf [], nextrev))
 
   | Re_capture (cid, r1) ->
-     let ((l1, f1),(l1_rev,n1)) = compile_with_rev r1 (fresh+1) (nextrev-1) ctype in
-     ((Leaf [SetRegisterToCP (start_reg cid)] @@ l1 @@ Leaf [SetRegisterToCP (end_reg cid)], f1+1),
-      (Leaf [SetRegisterToCP (start_reg cid)] @@ l1_rev @@ Leaf [SetRegisterToCP (end_reg cid)], n1-1))
+     let (f1,(l1_rev,n1)) = compile_rev r1 (fresh+1) (nextrev-1) ctype priority in
+     (f1+1,(Leaf [SetRegisterToCP (start_reg cid)] @@ l1_rev @@ Leaf [SetRegisterToCP (end_reg cid)], n1-1))
+     (* compile_rev r1 (fresh) (nextrev) ctype priority *)
   | Re_lookaround (_, _, _) ->
-     ((Leaf [], fresh), (Leaf [], nextrev))
-  | Re_anchor a -> ((Leaf [AnchorAssertion a], fresh+1), (Leaf [AnchorAssertion a], nextrev-1)
+     (fresh, (Leaf [], nextrev))
+  | Re_anchor a -> (fresh+1, (Leaf [AnchorAssertion a], nextrev-1)
 )
+and compile_to_bytecode_rev (r:regex) (code_size:int): code * (int Array.t) =
+  (* -1 for starting from 0 and -1 for the accepting state*)
+  let priority = Array.make code_size (-1) in
+  let (_,(c, _)) = compile_rev r 0 (code_size-2) Progress priority in
+  let full_c = tl_flatten c [Accept] in
+  (Array.of_list full_c, priority)
 
 and compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist * label  =
   match r with
@@ -262,6 +268,7 @@ type compiled_regex =
     main_ast: regex;
     main_bc: code;
     reversed_bc: code;
+    priority: int Array.t;
     main_cdns: cdns;
     (* lookaround data *)
     look_types: lookaround Array.t; (* the type of each lookaround *)
@@ -324,13 +331,21 @@ let full_compilation (r:regex) : compiled_regex =
   let capture_look = Array.make (maxlook+1) empty_code in
   let plus_code = Array.make (maxquant+1) empty_code in
   let main_code = compile_to_bytecode (lazy_prefix r) in
-  let reversed_code = compile_to_bytecode (reverse_regex r) in
+
+  let dummy = compile_to_bytecode r in
+  print_string (print_code dummy);
+  let code_size = Array.length dummy in
+  Printf.printf "code size = %d\n" code_size;
+  let (reversed_code, priority) = compile_to_bytecode_rev r code_size in
+  print_string (print_code reversed_code);
+  print_endline (Array.fold_left (fun output value -> output ^ " " ^ string_of_int value) "priority:" priority);
+  
   let main_cdns = compile_cdns r in
   let compiled = {
       main_ast = r; main_bc = main_code; reversed_bc = reversed_code;
       main_cdns = main_cdns;
       look_types = looktypes; look_cdns = lookcdns; look_ast = lookast;
       look_build_bc = build_look; look_capture_bc = capture_look;
-      plus_bc = plus_code } in
+      plus_bc = plus_code; priority = priority } in
   compile_extra_bytecode r compiled; (* compile lookarounds, CIN & CDN *)
   compiled
