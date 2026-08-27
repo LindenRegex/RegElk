@@ -48,7 +48,53 @@ type comp_type =
 (* [fresh] is the next available instruction label *)
 (* also returns the next fresh label after compilation *)
 (* if the option progress is false, then this generates code that cannot make progress in the string *)
-let rec compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist * label  =
+let rec compile_with_rev (r:regex) (fresh:label) (nextrev:label) (ctype:comp_type): (instruction treelist * label) * (instruction treelist * label)   =
+  match r with
+  | Re_empty -> ((Leaf [], fresh), (Leaf [], nextrev))
+  | Re_character c ->
+     if (ctype = ReconstructNulled) then
+      ((Leaf [Fail], fresh+1), (Leaf [Fail], nextrev-1))
+     else
+       begin match c with
+       | Char ch -> ((Leaf [Consume (Single ch)], fresh+1), (Leaf [Consume (Single ch)], nextrev-1))
+       | Dot -> ((Leaf [Consume All], fresh+1), (Leaf [Consume All], nextrev-1))
+       | Group g -> ((Leaf [Consume (Ranges (group_to_range g))], fresh+1), (Leaf [Consume (Ranges (group_to_range g))], nextrev-1))
+       | Class cl -> ((Leaf [Consume (Ranges (class_to_range cl))], fresh+1), (Leaf [Consume (Ranges (class_to_range cl))], nextrev-1))
+       | NegClass cl -> ((Leaf [Consume (Ranges (range_neg (class_to_range cl)))], fresh+1), (Leaf [Consume (Ranges (range_neg (class_to_range cl)))], nextrev-1))
+       end
+  | Re_con (r1, r2) ->
+     let ((l1, f1),(l1_rev,n1)) = compile_with_rev r1 fresh nextrev ctype in
+     let ((l2, f2),(l2_rev,n2)) = compile_with_rev r2 f1 n1 ctype in
+     ((l1 @@ l2, f2), (l2_rev @@ l1_rev, n2))
+  | Re_alt (r1, r2) ->
+     let ((l1, f1),(l1_rev,n1)) = compile_with_rev r1 (fresh+1) nextrev ctype in
+     let ((l2, f2),(l2_rev,n2)) = compile_with_rev r2 (f1+1) (n1-1) ctype in
+     ((Leaf [Fork (fresh+1, f1+1)] @@ l1 @@ Leaf [Jmp f2] @@ l2, f2),
+      (Leaf [Fork (n1+1, n2+1)] @@ l2_rev @@ Leaf [Jmp (nextrev+1)] @@ l1_rev, n2-1))
+
+  | Re_quant (_, qid, quant, r1) when ctype = Progress ->
+     (* removed special cases for now for simplicity also assumed no min or max are used*)
+       
+    let ((iter_code, iter_fresh),(iter_code_rev, iter_fresh_rev)) = compile_with_rev r1 (fresh+3) (nextrev-2) ctype in
+    let fork = if quant.greedy then Fork(fresh+1, iter_fresh+2)
+                else Fork (iter_fresh+2,fresh+1) in
+    (* priority doesnt matter in reverse *)
+    ((Leaf [fork; SetQuantToClock (qid, false); BeginLoop] @@ iter_code @@ Leaf [EndLoop; Jmp fresh],iter_fresh+2),
+      (Leaf [fork; SetQuantToClock (qid, false); BeginLoop] @@ iter_code_rev @@ Leaf [EndLoop; Jmp (iter_fresh_rev-2)],iter_fresh_rev-3))
+       
+  | Re_quant (_, _, _,_) ->
+    ((Leaf [], fresh), (Leaf [], nextrev))
+
+  | Re_capture (cid, r1) ->
+     let ((l1, f1),(l1_rev,n1)) = compile_with_rev r1 (fresh+1) (nextrev-1) ctype in
+     ((Leaf [SetRegisterToCP (start_reg cid)] @@ l1 @@ Leaf [SetRegisterToCP (end_reg cid)], f1+1),
+      (Leaf [SetRegisterToCP (start_reg cid)] @@ l1_rev @@ Leaf [SetRegisterToCP (end_reg cid)], n1-1))
+  | Re_lookaround (_, _, _) ->
+     ((Leaf [], fresh), (Leaf [], nextrev))
+  | Re_anchor a -> ((Leaf [AnchorAssertion a], fresh+1), (Leaf [AnchorAssertion a], nextrev-1)
+)
+
+and compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist * label  =
   match r with
   | Re_empty -> (Leaf [], fresh)
   | Re_character c ->
