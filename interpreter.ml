@@ -137,13 +137,13 @@ let detach (node : node) : unit =
       node.parent <- None
 
 let replace ~(old_node : node) ~(new_node : node) : unit =
-  match side_of old_node with
+  match side_of new_node with
   | None -> failwith "replace: node is a root"
   | Some (parent, side) ->
-      detach new_node;
-      set_slot parent side (Some new_node);
-      old_node.parent <- None;
-      new_node.parent <- Some parent
+      detach old_node;
+      set_slot parent side (Some old_node);
+      new_node.parent <- None;
+      old_node.parent <- Some parent
 
 let attach ~(child : node) ~(parent : node) (side : slot) : unit =
   detach child;
@@ -157,9 +157,9 @@ let rec compare_history (new_node : node) (old_node : node) (priority : int Arra
   if (Option.get new_node.parent).pc == (Option.get old_node.parent).pc then
     failwith "compare_history: nodes have the same parent"
   else if priority.(new_node.pc) == (Option.get new_node.parent).pc then
-    false
-  else if priority.(new_node.pc) == (Option.get old_node.parent).pc then
     true
+  else if priority.(new_node.pc) == (Option.get old_node.parent).pc then
+    false
   else begin
     Printf.printf "old_node pc: %d\n" old_node.pc;
     Printf.printf "new_node pc: %d\n" new_node.pc;
@@ -209,7 +209,8 @@ let print_forest ?(oc = stdout)
           let is_last = i = last in
           render ~prefix:"" ~branch:(if is_last then g_end else g_tee)
             ~cont:(if is_last then g_gap else g_bar) r)
-        roots
+        roots ;
+    Printf.printf "%!";
 
 (** * Threads  *)
 
@@ -226,7 +227,7 @@ type thread =
 
 let init_thread (initcap:Regs.regs) (initlook:Regs.regs) (initquant:Regs.regs) (start_pos:int): thread =
   let history_node = { start_pos = start_pos; pc = -1; parent = None; left = None; right = None } in
-  { pc = 0; history_node = history_node; capture_regs = initcap; look_regs = initlook; quant_regs = initquant; exit_allowed = false }
+  { pc = 0; history_node = history_node; capture_regs = initcap; look_regs = initlook; quant_regs = initquant; exit_allowed = true }
 
 
 let get_nodes (threads: thread list) : node list =
@@ -479,7 +480,13 @@ let filter_reset (r:regex) (capture:Regs.regs) (look:Regs.regs) (quant:Regs.regs
   filter_capture r cap_regs cap_clocks look_clocks quant_clocks maxclock;
   [cap_regs]
 
-
+let add_new_node (t :thread): unit =
+  let new_node = { start_pos = -1; pc = t.pc; parent = Some t.history_node; left = None; right = None } in
+  if t.history_node.left  = None then
+    t.history_node.left <- Some new_node
+  else
+    t.history_node.right <- Some new_node;
+  t.history_node <- new_node
 (** * Interpreter  *)
 
 (* modifies the state by advancing all threads along epsilon transitions *)
@@ -492,24 +499,18 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
   | [] -> () (* done advancing epsilon transitions *)
   | t::ac -> (* t: highest priority active thread *)
     let i = get_instr c t.pc in
+    add_new_node t;
     if (bpc_mem s.processed t.pc t.exit_allowed) then (* killing the lower priority thread if it has already been processed *)
       begin s.active <- ac;
 
         let old_node = Option.get (get_history_node s.processed t.pc t.exit_allowed) in
-        if compare_history t.history_node old_node priority then
+        if findall && compare_history t.history_node old_node priority then
           replace ~old_node:old_node ~new_node:t.history_node;
         advance_epsilon c s o dir findall priority
       end
     else begin
        s.clock <- s.clock + 1;  (* augmenting the global clock *)
        bpc_add s.processed t.pc t.exit_allowed t.history_node; (* adding the current pc being handled to the set of proccessed pcs *)
-
-       let new_node = { start_pos = -1; pc = t.pc; parent = Some t.history_node; left = None; right = None } in
-       if t.history_node.left  = None then
-        t.history_node.left <- Some new_node
-       else
-        t.history_node.right <- Some new_node;
-       t.history_node <- new_node;
 
        match i with
        | Consume ce -> (* adding the thread to the list of blocked thread if it isn't already there *)
@@ -858,7 +859,7 @@ let build_oracle (cr:compiled_regex) (str:string): oracle =
     if !verbose then Printf.printf "%s\n" (print_cdns lookcdn);
     (* no need to call find_match_plus, we don't care about any capture groups *)
     (* inside lookarounds in the oracle building phase *)
-      ignore (find_match bytecode cr.main_ast str initstate o direction lookcdn false [||])
+      ignore (find_match bytecode cr.main_ast str initstate o direction lookcdn false [||] [||])
   done;
   o                             (* returning the modified oracle *)
 

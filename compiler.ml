@@ -333,12 +333,12 @@ let full_compilation (r:regex) : compiled_regex =
   let main_code = compile_to_bytecode (lazy_prefix r) in
 
   let dummy = compile_to_bytecode r in
-  print_string (print_code dummy);
+  (* print_string (print_code dummy); *)
   let code_size = Array.length dummy in
-  Printf.printf "code size = %d\n" code_size;
+  (* Printf.printf "code size = %d\n" code_size; *)
   let (reversed_code, priority) = compile_to_bytecode_rev r code_size in
-  print_string (print_code reversed_code);
-  print_endline (Array.fold_left (fun output value -> output ^ " " ^ string_of_int value) "priority:" priority);
+  (* print_string (print_code reversed_code);
+  print_endline (Array.fold_left (fun output value -> output ^ " " ^ string_of_int value) "priority:" priority); *)
   
   let main_cdns = compile_cdns r in
   let compiled = {
