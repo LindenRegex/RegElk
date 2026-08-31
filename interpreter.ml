@@ -512,7 +512,7 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
   | t::ac -> (* t: highest priority active thread *)
     let i = get_instr c t.pc in
     add_new_node t;
-    if findall &&  (pc_mem s.processed.true_set t.pc || pc_mem s.processed.true_set t.pc) then 
+    if findall &&  bpc_mem s.processed t.pc t.exit_allowed then 
       begin
         s.active <- ac;
         let old_node = Option.get (get_history_node s.processed t.pc t.exit_allowed) in
