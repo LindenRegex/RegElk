@@ -104,6 +104,7 @@ let get_char (str:string) (cp:int) : char option =
 (* but the Reg.reg is undefined outside of this module *)
 type node = {
   pc : int;                      (* only meaningful when not a leaf *)
+  exit_allowed : bool; 
   mutable start_pos : int;
   mutable parent : node option;
   mutable left : node option;
@@ -153,21 +154,34 @@ let attach ~(child : node) ~(parent : node) (side : slot) : unit =
   set_slot parent side (Some child);
   child.parent <- Some parent
 
-let rec compare_history (new_node : node) (old_node : node) (priority : int Array.t) : bool =
-  if (Option.get new_node.parent).pc == (Option.get old_node.parent).pc then
-    failwith "compare_history: nodes have the same parent"
-  else if priority.(new_node.pc) == (Option.get new_node.parent).pc then
+let rec compare_history (new_node : node) (old_node : node) (priority : int Array.t) (priority_exits : bool option Array.t) : bool =
+  let new_parent = (Option.get new_node.parent) in
+  let old_parent = (Option.get old_node.parent) in
+  if new_parent.pc == old_parent.pc then
+    if new_parent.exit_allowed == old_parent.exit_allowed then
+      failwith "compare_history: nodes have the same parent"
+    else
+      match priority_exits.(new_parent.pc) with
+      | None -> let parent_cmp = compare_history new_parent old_parent priority priority_exits in
+                if parent_cmp then 
+                  priority_exits.(new_node.pc) <- Some new_node.exit_allowed
+                else
+                  priority_exits.(new_node.pc) <- Some old_node.exit_allowed;
+                parent_cmp
+      | Some b -> new_node.exit_allowed == b ;
+
+  else if priority.(new_node.pc) == new_parent.pc then
     true
-  else if priority.(new_node.pc) == (Option.get old_node.parent).pc then
+  else if priority.(new_node.pc) == old_parent.pc then
     false
   else begin
     Printf.printf "old_node pc: %d\n" old_node.pc;
     Printf.printf "new_node pc: %d\n" new_node.pc;
-    Printf.printf "old_node parent pc: %d\n" (Option.get old_node.parent).pc;
-    Printf.printf "new_node parent pc: %d\n" (Option.get new_node.parent).pc;
+    Printf.printf "old_node parent pc: %d\n" old_parent.pc;
+    Printf.printf "new_node parent pc: %d\n" new_parent.pc;
     failwith "compare_history: none of the parents is the high priority one"
   end
-    (* compare_history (Option.get new_node.parent) (Option.get old_node.parent) priority *)
+    (* compare_history new_parent old_parent priority *)
 
 
 let g_tee  = "\xe2\x94\x9c\xe2\x94\x80\xe2\x94\x80 "   (* |--  *)
@@ -226,7 +240,7 @@ type thread =
   }
 
 let init_thread (initcap:Regs.regs) (initlook:Regs.regs) (initquant:Regs.regs) (start_pos:int): thread =
-  let history_node = { start_pos = start_pos; pc = -1; parent = None; left = None; right = None } in
+  let history_node = { start_pos = start_pos; pc = -1; exit_allowed = true; parent = None; left = None; right = None } in
   { pc = 0; history_node = history_node; capture_regs = initcap; look_regs = initlook; quant_regs = initquant; exit_allowed = true }
 
 
@@ -247,7 +261,7 @@ let rec set_start_pos (nodes: node list) :unit =
 (* We use a mutable array of booleans, since we know the size of the bytecode *)
 type pcset = node option Array.t
 
-let init_pcset (bytecode_size: int) : pcset =
+let init_pcset (bytecode_size: int) =
   assert (bytecode_size > 0);
   Array.make bytecode_size None
 
@@ -260,9 +274,6 @@ let pc_mem (pcs:pcset) (pc:label) : bool =
   match pcs.(pc) with
   | Some _ -> true
   | None -> false
-
-let takes_priority (new_thread :thread) (old_thread:thread option) : bool =
-  true
 
 (* adds a thread and char at the head of a blocked list only if it's not already in *)
 (* modifies the pcset in place *)
@@ -280,10 +291,11 @@ type bpcset =
   {
    true_set: pcset;
    false_set: pcset;
+   priority_exits: bool option Array.t
   }
 
 let init_bpcset (bytecode_size: int) : bpcset =
-  { true_set = init_pcset(bytecode_size); false_set = init_pcset(bytecode_size) }
+  { true_set = init_pcset(bytecode_size); false_set = init_pcset(bytecode_size); priority_exits = init_pcset(bytecode_size); }
 
 let bpc_add (bpcs:bpcset) (pc:label) (exit_bool:bool) (node:node) : unit =
   match exit_bool with
@@ -481,7 +493,7 @@ let filter_reset (r:regex) (capture:Regs.regs) (look:Regs.regs) (quant:Regs.regs
   [cap_regs]
 
 let add_new_node (t :thread): unit =
-  let new_node = { start_pos = -1; pc = t.pc; parent = Some t.history_node; left = None; right = None } in
+  let new_node = { start_pos = -1; pc = t.pc; exit_allowed = t.exit_allowed; parent = Some t.history_node; left = None; right = None } in
   if t.history_node.left  = None then
     t.history_node.left <- Some new_node
   else
@@ -500,12 +512,16 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
   | t::ac -> (* t: highest priority active thread *)
     let i = get_instr c t.pc in
     add_new_node t;
-    if (bpc_mem s.processed t.pc t.exit_allowed) then (* killing the lower priority thread if it has already been processed *)
-      begin s.active <- ac;
-
+    if findall &&  (pc_mem s.processed.true_set t.pc || pc_mem s.processed.true_set t.pc) then 
+      begin
+        s.active <- ac;
         let old_node = Option.get (get_history_node s.processed t.pc t.exit_allowed) in
-        if findall && compare_history t.history_node old_node priority then
+        if compare_history t.history_node old_node priority s.processed.priority_exits then
           replace ~old_node:old_node ~new_node:t.history_node;
+        advance_epsilon c s o dir findall priority
+      end
+    else if (not findall && bpc_mem s.processed t.pc t.exit_allowed) then (* killing the lower priority thread if it has already been processed *)
+      begin s.active <- ac;
         advance_epsilon c s o dir findall priority
       end
     else begin
