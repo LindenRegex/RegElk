@@ -25,10 +25,43 @@ type 'x treelist =
 
 let (@@) x y = Concat (x,y)
 
+let next_id = ref 0
 type graph_node = {
+  id : int;
   instruction : instruction option;
   mutable neighbors : graph_node list;
+  mutable priorities : (int, int) Hashtbl.t;
 }
+let create_node (instruction: instruction): graph_node =
+  let id = !next_id in
+  incr next_id;
+  {
+    id = id;
+    instruction = Some instruction;
+    neighbors = [];
+    priorities = Hashtbl.create 1;
+  }
+let create_empty_node (): graph_node =
+  let id = !next_id in
+  incr next_id;
+  {
+    id = id;
+    instruction = None;
+    neighbors = [];
+    priorities = Hashtbl.create 1;
+  }
+let connect (node1:graph_node) (node2:graph_node): graph_node = 
+  (* node1 -> node2; *)
+  node2.neighbors <- node1::node2.neighbors;
+  Hashtbl.replace node1.priorities node2.id (Hashtbl.length node1.priorities);
+  node2
+let  get_priority src dst =
+  Hashtbl.find src.priorities dst.id
+let has_priority (source_node: graph_node) (node1: graph_node) (node2: graph_node) : bool =
+  let p1 = get_priority source_node node1 in
+  let p2 = get_priority source_node node2 in
+  p1 < p2
+  
 
 (* transforms a treelist into a list *)
 (* linear time in the total number of 'x elements in t *)
@@ -105,21 +138,18 @@ and compile_to_bytecode_rev (r:regex) (code_size:int): code * (int Array.t) =
   let full_c = tl_flatten c [Accept] in
   (Array.of_list full_c, priority)
 
-and connect (node1:graph_node) (node2:graph_node): graph_node = 
-  (* node1 -> node2; *)
-  node2
 and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph_node  =
   match r with
   | Re_empty -> start_node
   | Re_character c ->
-     if (ctype = ReconstructNulled) then connect start_node {instruction = Some Fail; neighbors = []}
+     if (ctype = ReconstructNulled) then connect start_node (create_node Fail)
      else
        begin match c with
-       | Char ch -> connect start_node {instruction = Some (Consume (Single ch)); neighbors = []}
-       | Dot -> connect start_node {instruction = Some (Consume All); neighbors = []}
-       | Group g -> connect start_node {instruction = Some (Consume (Ranges (group_to_range g))); neighbors = []}
-       | Class cl -> connect start_node {instruction = Some (Consume (Ranges (class_to_range cl))); neighbors = []}
-       | NegClass cl -> connect start_node {instruction = Some (Consume (Ranges (range_neg (class_to_range cl)))); neighbors = []}
+       | Char ch -> connect start_node (create_node (Consume (Single ch)))
+       | Dot -> connect start_node (create_node (Consume All))
+       | Group g -> connect start_node (create_node (Consume (Ranges (group_to_range g))))
+       | Class cl -> connect start_node (create_node (Consume (Ranges (class_to_range cl))))
+       | NegClass cl -> connect start_node (create_node (Consume (Ranges (range_neg (class_to_range cl)))))
        end
   | Re_con (r1, r2) ->
      let end_node = compile_to_graph r1 start_node ctype in
@@ -127,7 +157,7 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph
   | Re_alt (r1, r2) ->
      let end_node1 = compile_to_graph r1 start_node ctype in
      let end_node2 = compile_to_graph r2 start_node ctype in
-     let final_node = {instruction = None; neighbors = []} in
+     let final_node = create_empty_node () in
      ignore (connect end_node1 final_node);
      ignore (connect end_node2 final_node);
      final_node
@@ -136,10 +166,10 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph
      if (quant.min > 0 && quant.max = None && nul = NonNullable) then
        begin
          let min_node = repeat_min_graph (quant.min-1) qid r1 start_node ctype in
-         let body_start_node = {instruction = None; neighbors = []} in
+         let body_start_node = create_empty_node () in
          ignore(connect min_node body_start_node);
          let body_end_node = compile_to_graph r1 min_node ctype in
-         let final_node = {instruction = None; neighbors = []} in
+         let final_node = create_empty_node () in
          ignore(connect body_end_node final_node);
 
          if quant.greedy then begin
@@ -156,12 +186,12 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph
      else if (quant.min > 0 && quant.max = None && nul = CINullable && quant.greedy) then
        begin
          let min_node = repeat_min_graph (quant.min-1) qid r1 start_node ctype in
-         let fork_node = {instruction = None; neighbors = []} in
+         let fork_node = create_empty_node () in
          ignore(connect min_node fork_node);
-         let begin_node = {instruction = Some BeginLoop; neighbors = []} in
+         let begin_node = create_node (BeginLoop) in
          ignore(connect fork_node begin_node);
          let body_node = compile_to_graph r1 begin_node ctype in
-         let end_node = {instruction = Some EndLoop; neighbors = []} in
+         let end_node = create_node (EndLoop) in
          ignore(connect body_node end_node);
          ignore(connect end_node fork_node);
          fork_node
@@ -169,15 +199,15 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph
      else if (quant.min > 0 && quant.max = None && nul = CDNullable && quant.greedy) then
        begin
          let min_node = repeat_min_graph (quant.min-1) qid r1 start_node ctype in
-         let begin_node = {instruction = Some BeginLoop; neighbors = []} in
-         let checknull_node = {instruction = Some (CheckNullable qid); neighbors = []} in
+         let begin_node = create_node (BeginLoop) in
+         let checknull_node = create_node (CheckNullable qid) in
          ignore(connect min_node begin_node);
          ignore(connect min_node checknull_node);
 
          let body_node = compile_to_graph r1 begin_node ctype in
-         let end_node = {instruction = Some EndLoop; neighbors = []} in
+         let end_node = create_node (EndLoop) in
          ignore(connect body_node end_node);
-         let final_node = {instruction = None; neighbors = []} in
+         let final_node = create_empty_node () in
          ignore(connect end_node begin_node);
          ignore(connect end_node final_node);
          ignore(connect checknull_node final_node);
@@ -188,11 +218,11 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph
          let min_node = repeat_min_graph quant.min qid r1 start_node ctype in
          begin match quant.max with
          | None ->
-            let fork_node = {instruction = None; neighbors = []} in
-            let final_node = {instruction = None; neighbors = []} in
+            let fork_node = create_empty_node () in
+            let final_node = create_empty_node () in
             ignore(connect min_node fork_node);
-            let begin_node = {instruction = Some BeginLoop; neighbors = []} in
-            let end_node = {instruction = Some EndLoop; neighbors = []} in
+            let begin_node = create_node (BeginLoop) in
+            let end_node = create_node (EndLoop) in
             let iter_node = compile_to_graph r1 begin_node ctype in
             ignore(connect iter_node end_node);
             ignore(connect end_node fork_node);
@@ -206,8 +236,6 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph
             end;
             
             final_node
-
-            (* (min_code @@ Leaf [fork; SetQuantToClock (qid, false); BeginLoop] @@ iter_code @@ Leaf [EndLoop; Jmp min_fresh],iter_fresh+2) *)
          | Some max ->
             let opt_node = repeat_optional_graph (max-quant.min) qid r1 min_node ctype quant.greedy in
             opt_node
@@ -220,26 +248,25 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph
      compile_to_graph r1 start_node ctype
   | Re_lookaround (_, _, _) ->
      start_node
-  | Re_anchor a -> connect start_node {instruction = Some (AnchorAssertion a); neighbors = []}
+  | Re_anchor a -> connect start_node (create_node (AnchorAssertion a))
 
 and repeat_min_graph (min:int) (qid:quantid) (r:regex) (start_node:graph_node) (ctype:comp_type): graph_node =
   if min = 0 then start_node
   else
     let end_node = compile_to_graph r start_node ctype in
     let final_node = repeat_min_graph (min-1) qid r end_node ctype in
-    (* (Leaf [SetQuantToClock (qid,false)] @@ body_code @@ next_code, next_fresh) *)
     final_node
 
 and repeat_optional_graph (nb:int) (qid:quantid) (r:regex) (start_node:graph_node) (ctype:comp_type) (greedy:bool) : graph_node =
   if nb = 0 then start_node
   else
-    let begin_loop = {instruction = Some BeginLoop; neighbors=[]} in
+    let begin_loop = create_node (BeginLoop) in
     let end1 = compile_to_graph r begin_loop ctype in
-    let end_loop = {instruction = Some EndLoop; neighbors=[]} in
+    let end_loop = create_node (EndLoop) in
     ignore (connect end1 end_loop);
     
     let end2 = repeat_optional_graph (nb-1) qid r end_loop ctype greedy in
-    let final_node = {instruction = None; neighbors =[]} in
+    let final_node = create_empty_node () in
     ignore (connect end2 final_node);
     
     if greedy then begin
