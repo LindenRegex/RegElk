@@ -50,7 +50,7 @@ let create_empty_node (): graph_node =
     neighbors = [];
     priorities = Hashtbl.create 1;
   }
-let connect (node1:graph_node) (node2:graph_node): graph_node = 
+let reverse_connect (node1:graph_node) (node2:graph_node): graph_node = 
   (* node1 -> node2; *)
   node2.neighbors <- node1::node2.neighbors;
   Hashtbl.replace node1.priorities node2.id (Hashtbl.length node1.priorities);
@@ -138,7 +138,7 @@ and compile_to_bytecode_rev (r:regex) (code_size:int): code * (int Array.t) =
   let full_c = tl_flatten c [Accept] in
   (Array.of_list full_c, priority)
 
-and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph_node  =
+and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type) (connect: graph_node->graph_node->graph_node): graph_node  =
   match r with
   | Re_empty -> start_node
   | Re_character c ->
@@ -152,11 +152,11 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph
        | NegClass cl -> connect start_node (create_node (Consume (Ranges (range_neg (class_to_range cl)))))
        end
   | Re_con (r1, r2) ->
-     let end_node = compile_to_graph r1 start_node ctype in
-     compile_to_graph r2 end_node ctype
+     let end_node = compile_to_graph r1 start_node ctype connect in
+     compile_to_graph r2 end_node ctype connect
   | Re_alt (r1, r2) ->
-     let end_node1 = compile_to_graph r1 start_node ctype in
-     let end_node2 = compile_to_graph r2 start_node ctype in
+     let end_node1 = compile_to_graph r1 start_node ctype connect in
+     let end_node2 = compile_to_graph r2 start_node ctype connect in
      let final_node = create_empty_node () in
      ignore (connect end_node1 final_node);
      ignore (connect end_node2 final_node);
@@ -165,10 +165,10 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph
   | Re_quant (nul, qid, quant, r1) when ctype = Progress ->
      if (quant.min > 0 && quant.max = None && nul = NonNullable) then
        begin
-         let min_node = repeat_min_graph (quant.min-1) qid r1 start_node ctype in
+         let min_node = repeat_min_graph (quant.min-1) qid r1 start_node ctype connect in
          let body_start_node = create_empty_node () in
          ignore(connect min_node body_start_node);
-         let body_end_node = compile_to_graph r1 min_node ctype in
+         let body_end_node = compile_to_graph r1 min_node ctype connect in
          let final_node = create_empty_node () in
          ignore(connect body_end_node final_node);
 
@@ -185,12 +185,12 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph
        end
      else if (quant.min > 0 && quant.max = None && nul = CINullable && quant.greedy) then
        begin
-         let min_node = repeat_min_graph (quant.min-1) qid r1 start_node ctype in
+         let min_node = repeat_min_graph (quant.min-1) qid r1 start_node ctype connect in
          let fork_node = create_empty_node () in
          ignore(connect min_node fork_node);
          let begin_node = create_node (BeginLoop) in
          ignore(connect fork_node begin_node);
-         let body_node = compile_to_graph r1 begin_node ctype in
+         let body_node = compile_to_graph r1 begin_node ctype connect in
          let end_node = create_node (EndLoop) in
          ignore(connect body_node end_node);
          ignore(connect end_node fork_node);
@@ -198,13 +198,13 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph
        end
      else if (quant.min > 0 && quant.max = None && nul = CDNullable && quant.greedy) then
        begin
-         let min_node = repeat_min_graph (quant.min-1) qid r1 start_node ctype in
+         let min_node = repeat_min_graph (quant.min-1) qid r1 start_node ctype connect in
          let begin_node = create_node (BeginLoop) in
          let checknull_node = create_node (CheckNullable qid) in
          ignore(connect min_node begin_node);
          ignore(connect min_node checknull_node);
 
-         let body_node = compile_to_graph r1 begin_node ctype in
+         let body_node = compile_to_graph r1 begin_node ctype connect in
          let end_node = create_node (EndLoop) in
          ignore(connect body_node end_node);
          let final_node = create_empty_node () in
@@ -215,7 +215,7 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph
        end
      else
        begin
-         let min_node = repeat_min_graph quant.min qid r1 start_node ctype in
+         let min_node = repeat_min_graph quant.min qid r1 start_node ctype connect in
          begin match quant.max with
          | None ->
             let fork_node = create_empty_node () in
@@ -223,7 +223,7 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph
             ignore(connect min_node fork_node);
             let begin_node = create_node (BeginLoop) in
             let end_node = create_node (EndLoop) in
-            let iter_node = compile_to_graph r1 begin_node ctype in
+            let iter_node = compile_to_graph r1 begin_node ctype connect in
             ignore(connect iter_node end_node);
             ignore(connect end_node fork_node);
             if quant.greedy then begin
@@ -237,7 +237,7 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph
             
             final_node
          | Some max ->
-            let opt_node = repeat_optional_graph (max-quant.min) qid r1 min_node ctype quant.greedy in
+            let opt_node = repeat_optional_graph (max-quant.min) qid r1 min_node ctype quant.greedy connect in
             opt_node
          end
        end
@@ -245,27 +245,27 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type): graph
      (* suppose this case wont happen in the reverse_graph creation *)
       start_node
   | Re_capture (_, r1) ->
-     compile_to_graph r1 start_node ctype
+     compile_to_graph r1 start_node ctype connect
   | Re_lookaround (_, _, _) ->
      start_node
   | Re_anchor a -> connect start_node (create_node (AnchorAssertion a))
 
-and repeat_min_graph (min:int) (qid:quantid) (r:regex) (start_node:graph_node) (ctype:comp_type): graph_node =
+and repeat_min_graph (min:int) (qid:quantid) (r:regex) (start_node:graph_node) (ctype:comp_type) (connect: graph_node->graph_node->graph_node): graph_node =
   if min = 0 then start_node
   else
-    let end_node = compile_to_graph r start_node ctype in
-    let final_node = repeat_min_graph (min-1) qid r end_node ctype in
+    let end_node = compile_to_graph r start_node ctype connect in
+    let final_node = repeat_min_graph (min-1) qid r end_node ctype connect in
     final_node
 
-and repeat_optional_graph (nb:int) (qid:quantid) (r:regex) (start_node:graph_node) (ctype:comp_type) (greedy:bool) : graph_node =
+and repeat_optional_graph (nb:int) (qid:quantid) (r:regex) (start_node:graph_node) (ctype:comp_type) (greedy:bool) (connect: graph_node->graph_node->graph_node): graph_node =
   if nb = 0 then start_node
   else
     let begin_loop = create_node (BeginLoop) in
-    let end1 = compile_to_graph r begin_loop ctype in
+    let end1 = compile_to_graph r begin_loop ctype connect in
     let end_loop = create_node (EndLoop) in
     ignore (connect end1 end_loop);
     
-    let end2 = repeat_optional_graph (nb-1) qid r end_loop ctype greedy in
+    let end2 = repeat_optional_graph (nb-1) qid r end_loop ctype greedy connect in
     let final_node = create_empty_node () in
     ignore (connect end2 final_node);
     
@@ -279,6 +279,13 @@ and repeat_optional_graph (nb:int) (qid:quantid) (r:regex) (start_node:graph_nod
     end;
 
     final_node
+
+and compile_reverse_graph (r:regex): graph_node =
+  let start_node = create_empty_node () in
+  let end_node = compile_to_graph r start_node Progress reverse_connect in
+  let accept_node = create_node Accept in
+  ignore (reverse_connect end_node accept_node);
+  start_node
 and compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist * label  =
   match r with
   | Re_empty -> (Leaf [], fresh)
@@ -448,6 +455,7 @@ type compiled_regex =
     main_bc: code;
     reversed_bc: code;
     priority: int Array.t;
+    reverse_graph: graph_node;
     main_cdns: cdns;
     (* lookaround data *)
     look_types: lookaround Array.t; (* the type of each lookaround *)
@@ -519,12 +527,13 @@ let full_compilation (r:regex) : compiled_regex =
   (* print_string (print_code reversed_code);
   print_endline (Array.fold_left (fun output value -> output ^ " " ^ string_of_int value) "priority:" priority); *)
   
+  let reverse_graph = compile_reverse_graph r in
   let main_cdns = compile_cdns r in
   let compiled = {
       main_ast = r; main_bc = main_code; reversed_bc = reversed_code;
       main_cdns = main_cdns;
       look_types = looktypes; look_cdns = lookcdns; look_ast = lookast;
       look_build_bc = build_look; look_capture_bc = capture_look;
-      plus_bc = plus_code; priority = priority } in
+      plus_bc = plus_code; priority = priority ; reverse_graph = reverse_graph} in
   compile_extra_bytecode r compiled; (* compile lookarounds, CIN & CDN *)
   compiled

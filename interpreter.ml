@@ -613,6 +613,114 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
           advance_epsilon c s o dir findall priority
      end
 
+let rec advance_epsilon_reverse (c:code) (s:interpreter_state) (o:oracle) (dir:direction) (findall:bool) (priority:int Array.t): unit =
+  if !debug then Printf.printf "%s\n%!" ("Clock "^string_of_int s.clock^"|Epsilon active: " ^ print_active s.active);
+
+  match s.active with
+  | [] -> () (* done advancing epsilon transitions *)
+  | t::ac -> (* t: highest priority active thread *)
+    let i = get_instr c t.pc in
+    add_new_node t;
+    if findall &&  bpc_mem s.processed t.pc t.exit_allowed then 
+      begin
+        s.active <- ac;
+        let old_node = Option.get (get_history_node s.processed t.pc t.exit_allowed) in
+        if compare_history t.history_node old_node priority s.processed.priority_exits then
+          replace ~old_node:old_node ~new_node:t.history_node;
+        advance_epsilon_reverse c s o dir findall priority
+      end
+    else if (not findall && bpc_mem s.processed t.pc t.exit_allowed) then (* killing the lower priority thread if it has already been processed *)
+      begin s.active <- ac;
+        advance_epsilon_reverse c s o dir findall priority
+      end
+    else begin
+       s.clock <- s.clock + 1;  (* augmenting the global clock *)
+       bpc_add s.processed t.pc t.exit_allowed t.history_node; (* adding the current pc being handled to the set of proccessed pcs *)
+
+       match i with
+       | Consume ce -> (* adding the thread to the list of blocked thread if it isn't already there *)
+          s.blocked <- add_thread t ce s.blocked s.isblocked; (* also updates isblocked *)
+          s.active <- ac;
+          advance_epsilon_reverse c s o dir findall priority
+       | Accept ->             (* updates the best match and don't consider the remain active threads *)
+          if findall then begin
+            s.active <- ac;
+            s.bestmatch <- Some t;
+            advance_epsilon_reverse c s o dir findall priority
+          end
+          else begin
+            s.active <- [];
+            s.bestmatch <- Some t;
+            () (* no recursive call *)
+          end
+       | Jmp x ->
+          t.pc <- x;
+          advance_epsilon_reverse c s o dir findall priority
+       | Fork (x,y) ->           (* x has higher priority *)
+          t.pc <- y;
+          s.active <- {pc = x;
+                       history_node = t.history_node;
+                       capture_regs = Regs.copy t.capture_regs;
+                       look_regs = Regs.copy t.look_regs;
+                       quant_regs = Regs.copy t.quant_regs;
+                       exit_allowed = t.exit_allowed}::s.active;
+          advance_epsilon_reverse c s o dir findall priority
+       | SetRegisterToCP r ->
+          (* modifying the capture regs of the current thread *)
+          t.capture_regs <- Regs.set_reg t.capture_regs r (Some s.cp) s.clock;
+          t.pc <- t.pc + 1;
+          advance_epsilon_reverse c s o dir findall priority
+       | SetQuantToClock (q,b) ->
+          (* saving the current cp if we are nulling a + *)
+          let ocp = if b then (Some s.cp) else None in
+          (* adding the last iteration clock *)
+          t.quant_regs <- Regs.set_reg t.quant_regs q ocp s.clock;
+          t.pc <- t.pc + 1;
+          advance_epsilon_reverse c s o dir findall priority
+       | CheckOracle l ->
+          if (get_oracle o s.cp l)
+          then begin
+              t.pc <- t.pc + 1; (* keeping the thread alive *)
+              (* remembering the cp where we last needed the oracle *)
+              t.look_regs <- Regs.set_reg t.look_regs l (Some s.cp) s.clock;
+            end
+          else s.active <- ac;  (* killing the thread *)
+          advance_epsilon_reverse c s o dir findall priority
+       | NegCheckOracle l ->
+          if (get_oracle o s.cp l)
+          then s.active <- ac   (* killing the thread *)
+          else t.pc <- t.pc + 1;(* keeping the thread alive *)
+          advance_epsilon_reverse c s o dir findall priority
+       | WriteOracle l ->
+          (* we reached a match but we want to write that into the oracle. we don't discard lower priority threads *)
+          s.active <- ac;       (* no need to consider that thread anymore *)
+          set_oracle o s.cp l;    (* writing to the oracle *)
+          advance_epsilon_reverse c s o dir findall priority  (* we keep searching for more matches *)
+       | BeginLoop ->
+       (* we need to set exit_allowed to false: now exiting a loop is forbidden according to JS semantics *)
+          t.exit_allowed <- false;
+          t.pc <- t.pc + 1;
+          advance_epsilon_reverse c s o dir findall priority
+       | EndLoop ->
+          (* this transition is only possible if we didn't begin this loop during this epsilon transition phase *)
+          begin match t.exit_allowed with
+          | true -> t.pc <- t.pc+1; advance_epsilon_reverse c s o dir findall priority
+          | false -> s.active <- ac; advance_epsilon_reverse c s o dir findall priority (* killing the current thread *)
+          end
+       | CheckNullable qid ->
+          if (cdn_get s.cdn qid)
+          then t.pc <- t.pc+1   (* keeping the thread alive *)
+          else s.active <- ac;  (* killing the thread *)
+          advance_epsilon_reverse c s o dir findall priority
+       | AnchorAssertion a ->
+          if (is_satisfied a s.context dir)
+          then t.pc <- t.pc+1   (* keeping the thread alive *)
+          else s.active <- ac;  (* killing the thread *)
+          advance_epsilon_reverse c s o dir findall priority
+       | Fail ->
+          s.active <- ac;       (* killing the current thread *)
+          advance_epsilon_reverse c s o dir findall priority
+     end
 
 (* modifies the state by consuming the next character  *)
 (* calls itself recursively until there are no more blocked threads *)
@@ -677,7 +785,8 @@ let rec find_match (c:code) (main_ast:regex) (str:string) (s:interpreter_state) 
   let previous_ends = get_nodes s.active in
   if findall then
     s.bestmatch <- None;
-  advance_epsilon c s o dir findall priority;
+  if findall then
+    advance_epsilon c s o dir findall priority;
 
   if findall then begin
     set_start_pos previous_ends;
