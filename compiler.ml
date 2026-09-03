@@ -247,6 +247,7 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type) (conne
   | Re_capture (_, r1) ->
      compile_to_graph r1 start_node ctype connect
   | Re_lookaround (_, _, _) ->
+    (* Todo: should still check the oracle at the position to see if it has the condition *)
      start_node
   | Re_anchor a -> connect start_node (create_node (AnchorAssertion a))
 
@@ -280,12 +281,13 @@ and repeat_optional_graph (nb:int) (qid:quantid) (r:regex) (start_node:graph_nod
 
     final_node
 
-and compile_reverse_graph (r:regex): graph_node =
-  let start_node = create_empty_node () in
-  let end_node = compile_to_graph r start_node Progress reverse_connect in
+and compile_reverse_graph (r:regex): graph_node * int =
+  (* start node is the original accepting point that has pc=0 because it's the first that is being created *)
+  let start_node = create_empty_node () in 
   let accept_node = create_node Accept in
-  ignore (reverse_connect end_node accept_node);
-  start_node
+  let end_node = compile_to_graph r accept_node Progress reverse_connect in
+  ignore (reverse_connect end_node start_node);
+  (start_node , end_node.id +1)
 and compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist * label  =
   match r with
   | Re_empty -> (Leaf [], fresh)
@@ -453,9 +455,8 @@ type compiled_regex =
     (* data for the main expression *)
     main_ast: regex;
     main_bc: code;
-    reversed_bc: code;
-    priority: int Array.t;
     reverse_graph: graph_node;
+    rv_graph_size: int;
     main_cdns: cdns;
     (* lookaround data *)
     look_types: lookaround Array.t; (* the type of each lookaround *)
@@ -518,22 +519,14 @@ let full_compilation (r:regex) : compiled_regex =
   let capture_look = Array.make (maxlook+1) empty_code in
   let plus_code = Array.make (maxquant+1) empty_code in
   let main_code = compile_to_bytecode (lazy_prefix r) in
-
-  let dummy = compile_to_bytecode r in
-  (* print_string (print_code dummy); *)
-  let code_size = Array.length dummy in
-  (* Printf.printf "code size = %d\n" code_size; *)
-  let (reversed_code, priority) = compile_to_bytecode_rev r code_size in
-  (* print_string (print_code reversed_code);
-  print_endline (Array.fold_left (fun output value -> output ^ " " ^ string_of_int value) "priority:" priority); *)
   
-  let reverse_graph = compile_reverse_graph r in
+  let (reverse_graph, rv_graph_size) = compile_reverse_graph r in
   let main_cdns = compile_cdns r in
   let compiled = {
-      main_ast = r; main_bc = main_code; reversed_bc = reversed_code;
+      main_ast = r; main_bc = main_code;
       main_cdns = main_cdns;
       look_types = looktypes; look_cdns = lookcdns; look_ast = lookast;
       look_build_bc = build_look; look_capture_bc = capture_look;
-      plus_bc = plus_code; priority = priority ; reverse_graph = reverse_graph} in
+      plus_bc = plus_code; reverse_graph = reverse_graph; rv_graph_size = rv_graph_size} in
   compile_extra_bytecode r compiled; (* compile lookarounds, CIN & CDN *)
   compiled
