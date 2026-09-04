@@ -286,8 +286,8 @@ and compile_reverse_graph (r:regex): graph_node * int =
   let start_node = create_empty_node () in 
   let accept_node = create_node Accept in
   let end_node = compile_to_graph r accept_node Progress reverse_connect in
-  ignore (reverse_connect end_node start_node);
-  (start_node , end_node.id +1)
+  reverse_connect end_node start_node;
+  (start_node , !next_id)
 and compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist * label  =
   match r with
   | Re_empty -> (Leaf [], fresh)
