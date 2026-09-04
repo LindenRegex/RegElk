@@ -5,6 +5,7 @@ open Regex
 open Bytecode
 open Charclasses
 open Cdn
+open Flags
 
 (** * Registers *)
 
@@ -80,6 +81,36 @@ let reverse_connect (node1:full_node) (node2:full_node) =
         reverse_connect_half node1.node_t node2.node_t;
         reverse_connect_half node1.node_f node2.node_f;
       end
+
+let print_reverse_graph (start_node:full_node) : unit =
+  let visited = Hashtbl.create 16 in
+  let rec print_node (node:half_node) =
+    if not (Hashtbl.mem visited node.id) then begin
+      Hashtbl.add visited node.id ();
+      let instruction =
+        match node.full_node.instruction with
+        | None -> "Empty"
+        | Some instruction -> print_instruction instruction
+      in
+      let neighbors =
+        String.concat ", " (List.map (fun neighbor -> string_of_int neighbor.id) node.neighbors)
+      in
+      let priorities =
+        Hashtbl.fold (fun destination_id priority entries ->
+            (priority, destination_id) :: entries)
+          node.priorities []
+        |> List.sort (fun (priority1, _) (priority2, _) -> compare priority1 priority2)
+        |> List.map (fun (priority, destination_id) ->
+               Printf.sprintf "%d -> %d" destination_id priority)
+        |> String.concat ", "
+      in
+      Printf.printf "node %d\n  instruction: %s\n  neighbors: [%s]\n  priorities: [%s]\n"
+        node.id instruction neighbors priorities;
+      List.iter print_node node.neighbors
+    end
+  in
+  print_node start_node.node_t;
+  print_node start_node.node_f
 
 let  get_priority src dst =
   Hashtbl.find src.priorities dst.id
@@ -199,9 +230,8 @@ and compile_to_graph (r:regex) (start_node: full_node) (ctype:comp_type) (connec
          let min_node = repeat_min_graph (quant.min-1) qid r1 start_node ctype connect in
          let body_start_node = create_empty_node () in
          connect min_node body_start_node;
-         let body_end_node = compile_to_graph r1 min_node ctype connect in
+         let body_end_node = compile_to_graph r1 body_start_node ctype connect in
          let final_node = create_empty_node () in
-         connect body_end_node final_node;
 
          if quant.greedy then begin
           connect body_end_node body_start_node;
@@ -322,6 +352,7 @@ and compile_reverse_graph (r:regex): full_node * int =
   let accept_node = create_node Accept in
   let end_node = compile_to_graph r accept_node Progress reverse_connect in
   reverse_connect end_node start_node;
+  if !debug then print_reverse_graph start_node;
   (start_node , !next_id)
 and compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist * label  =
   match r with
