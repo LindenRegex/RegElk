@@ -26,42 +26,67 @@ type 'x treelist =
 let (@@) x y = Concat (x,y)
 
 let next_id = ref 0
-type graph_node = {
+type half_node = {
   id : int;
-  instruction : instruction option;
-  mutable neighbors : graph_node list;
+  mutable full_node : full_node;
+  mutable neighbors : half_node list;
   mutable priorities : (int, int) Hashtbl.t;
 }
-let create_node (instruction: instruction): graph_node =
+
+and full_node = {
+  instruction : instruction option;
+  node_t : half_node;
+  node_f : half_node;
+}
+ 
+let fresh_id () =
   let id = !next_id in
   incr next_id;
-  {
-    id = id;
-    instruction = Some instruction;
-    neighbors = [];
-    priorities = Hashtbl.create 1;
-  }
-let create_empty_node (): graph_node =
-  let id = !next_id in
-  incr next_id;
-  {
-    id = id;
-    instruction = None;
-    neighbors = [];
-    priorities = Hashtbl.create 1;
-  }
-let reverse_connect (node1:graph_node) (node2:graph_node): graph_node = 
+  id
+
+let create_full_node instruction =
+  let id_t = fresh_id () in
+  let id_f = fresh_id () in
+  let rec node_t =
+    { id = id_t; full_node = full; neighbors = []; priorities = Hashtbl.create 1 }
+  and node_f =
+    { id = id_f; full_node = full; neighbors = []; priorities = Hashtbl.create 1 }
+  and full = { instruction; node_t; node_f } in
+  full
+
+let create_node instruction = create_full_node (Some instruction)
+let create_empty_node () = create_full_node None
+
+let reverse_connect_half (node1:half_node) (node2:half_node) = 
   (* node1 -> node2; *)
   node2.neighbors <- node1::node2.neighbors;
-  Hashtbl.replace node1.priorities node2.id (Hashtbl.length node1.priorities);
-  node2
+  Hashtbl.replace node1.priorities node2.id (Hashtbl.length node1.priorities)
+
+let reverse_connect (node1:full_node) (node2:full_node) = 
+  (* node1 -> node2; *)
+  match node1.instruction with
+    | Some (Consume _) -> begin
+        reverse_connect_half node1.node_t node2.node_t;
+        reverse_connect_half node1.node_f node2.node_t
+      end
+    | Some (BeginLoop) -> begin
+        reverse_connect_half node1.node_t node2.node_f;
+        reverse_connect_half node1.node_f node2.node_f
+      end
+    | Some (EndLoop) -> begin
+        reverse_connect_half node1.node_t node2.node_t;
+      end
+    | _ -> begin
+        reverse_connect_half node1.node_t node2.node_t;
+        reverse_connect_half node1.node_f node2.node_f;
+      end
+
 let  get_priority src dst =
   Hashtbl.find src.priorities dst.id
-let has_priority (source_node: graph_node) (node1: graph_node) (node2: graph_node) : bool =
+let has_priority (source_node: half_node) (node1: half_node) (node2: half_node) : bool =
   let p1 = get_priority source_node node1 in
   let p2 = get_priority source_node node2 in
   p1 < p2
-  
 
 (* transforms a treelist into a list *)
 (* linear time in the total number of 'x elements in t *)
@@ -138,19 +163,25 @@ and compile_to_bytecode_rev (r:regex) (code_size:int): code * (int Array.t) =
   let full_c = tl_flatten c [Accept] in
   (Array.of_list full_c, priority)
 
-and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type) (connect: graph_node->graph_node->graph_node): graph_node  =
+and compile_to_graph (r:regex) (start_node: full_node) (ctype:comp_type) (connect: full_node->full_node->unit): full_node  =
   match r with
   | Re_empty -> start_node
   | Re_character c ->
-     if (ctype = ReconstructNulled) then connect start_node (create_node Fail)
+     if (ctype = ReconstructNulled) then begin 
+       let next_node = create_node Fail in 
+       connect start_node next_node; 
+       next_node
+     end
      else
-       begin match c with
-       | Char ch -> connect start_node (create_node (Consume (Single ch)))
-       | Dot -> connect start_node (create_node (Consume All))
-       | Group g -> connect start_node (create_node (Consume (Ranges (group_to_range g))))
-       | Class cl -> connect start_node (create_node (Consume (Ranges (class_to_range cl))))
-       | NegClass cl -> connect start_node (create_node (Consume (Ranges (range_neg (class_to_range cl)))))
-       end
+       let next_node = match c with
+       | Char ch -> create_node (Consume (Single ch))
+       | Dot -> create_node (Consume All)
+       | Group g -> create_node (Consume (Ranges (group_to_range g)))
+       | Class cl -> create_node (Consume (Ranges (class_to_range cl)))
+       | NegClass cl -> create_node (Consume (Ranges (range_neg (class_to_range cl))))
+     in
+     connect start_node next_node;
+     next_node
   | Re_con (r1, r2) ->
      let end_node = compile_to_graph r1 start_node ctype connect in
      compile_to_graph r2 end_node ctype connect
@@ -158,8 +189,8 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type) (conne
      let end_node1 = compile_to_graph r1 start_node ctype connect in
      let end_node2 = compile_to_graph r2 start_node ctype connect in
      let final_node = create_empty_node () in
-     ignore (connect end_node1 final_node);
-     ignore (connect end_node2 final_node);
+     connect end_node1 final_node;
+     connect end_node2 final_node;
      final_node
 
   | Re_quant (nul, qid, quant, r1) when ctype = Progress ->
@@ -167,18 +198,18 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type) (conne
        begin
          let min_node = repeat_min_graph (quant.min-1) qid r1 start_node ctype connect in
          let body_start_node = create_empty_node () in
-         ignore(connect min_node body_start_node);
+         connect min_node body_start_node;
          let body_end_node = compile_to_graph r1 min_node ctype connect in
          let final_node = create_empty_node () in
-         ignore(connect body_end_node final_node);
+         connect body_end_node final_node;
 
          if quant.greedy then begin
-          ignore(connect body_end_node body_start_node);
-          ignore(connect body_end_node final_node );
+          connect body_end_node body_start_node;
+          connect body_end_node final_node ;
          end
          else begin
-          ignore(connect body_end_node final_node );
-          ignore(connect body_end_node body_start_node);
+          connect body_end_node final_node ;
+          connect body_end_node body_start_node;
          end;
 
          final_node
@@ -187,13 +218,13 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type) (conne
        begin
          let min_node = repeat_min_graph (quant.min-1) qid r1 start_node ctype connect in
          let fork_node = create_empty_node () in
-         ignore(connect min_node fork_node);
+         connect min_node fork_node;
          let begin_node = create_node (BeginLoop) in
-         ignore(connect fork_node begin_node);
+         connect fork_node begin_node;
          let body_node = compile_to_graph r1 begin_node ctype connect in
          let end_node = create_node (EndLoop) in
-         ignore(connect body_node end_node);
-         ignore(connect end_node fork_node);
+         connect body_node end_node;
+         connect end_node fork_node;
          fork_node
        end
      else if (quant.min > 0 && quant.max = None && nul = CDNullable && quant.greedy) then
@@ -201,16 +232,16 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type) (conne
          let min_node = repeat_min_graph (quant.min-1) qid r1 start_node ctype connect in
          let begin_node = create_node (BeginLoop) in
          let checknull_node = create_node (CheckNullable qid) in
-         ignore(connect min_node begin_node);
-         ignore(connect min_node checknull_node);
+         connect min_node begin_node;
+         connect min_node checknull_node;
 
          let body_node = compile_to_graph r1 begin_node ctype connect in
          let end_node = create_node (EndLoop) in
-         ignore(connect body_node end_node);
+         connect body_node end_node;
          let final_node = create_empty_node () in
-         ignore(connect end_node begin_node);
-         ignore(connect end_node final_node);
-         ignore(connect checknull_node final_node);
+         connect end_node begin_node;
+         connect end_node final_node;
+         connect checknull_node final_node;
          final_node
        end
      else
@@ -220,19 +251,19 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type) (conne
          | None ->
             let fork_node = create_empty_node () in
             let final_node = create_empty_node () in
-            ignore(connect min_node fork_node);
+            connect min_node fork_node;
             let begin_node = create_node (BeginLoop) in
             let end_node = create_node (EndLoop) in
             let iter_node = compile_to_graph r1 begin_node ctype connect in
-            ignore(connect iter_node end_node);
-            ignore(connect end_node fork_node);
+            connect iter_node end_node;
+            connect end_node fork_node;
             if quant.greedy then begin
-              ignore(connect fork_node begin_node);
-              ignore(connect fork_node final_node);
+              connect fork_node begin_node;
+              connect fork_node final_node;
             end
             else begin
-              ignore(connect fork_node final_node);
-              ignore(connect fork_node begin_node);
+              connect fork_node final_node;
+              connect fork_node begin_node;
             end;
             
             final_node
@@ -249,39 +280,43 @@ and compile_to_graph (r:regex) (start_node: graph_node) (ctype:comp_type) (conne
   | Re_lookaround (_, _, _) ->
     (* Todo: should still check the oracle at the position to see if it has the condition *)
      start_node
-  | Re_anchor a -> connect start_node (create_node (AnchorAssertion a))
+  | Re_anchor a -> begin 
+       let next_node = create_node (AnchorAssertion a) in
+       connect start_node next_node; 
+       next_node
+  end 
 
-and repeat_min_graph (min:int) (qid:quantid) (r:regex) (start_node:graph_node) (ctype:comp_type) (connect: graph_node->graph_node->graph_node): graph_node =
+and repeat_min_graph (min:int) (qid:quantid) (r:regex) (start_node:full_node) (ctype:comp_type) (connect: full_node->full_node->unit): full_node =
   if min = 0 then start_node
   else
     let end_node = compile_to_graph r start_node ctype connect in
     let final_node = repeat_min_graph (min-1) qid r end_node ctype connect in
     final_node
 
-and repeat_optional_graph (nb:int) (qid:quantid) (r:regex) (start_node:graph_node) (ctype:comp_type) (greedy:bool) (connect: graph_node->graph_node->graph_node): graph_node =
+and repeat_optional_graph (nb:int) (qid:quantid) (r:regex) (start_node:full_node) (ctype:comp_type) (greedy:bool) (connect: full_node->full_node->unit): full_node =
   if nb = 0 then start_node
   else
     let begin_loop = create_node (BeginLoop) in
     let end1 = compile_to_graph r begin_loop ctype connect in
     let end_loop = create_node (EndLoop) in
-    ignore (connect end1 end_loop);
+    connect end1 end_loop;
     
     let end2 = repeat_optional_graph (nb-1) qid r end_loop ctype greedy connect in
     let final_node = create_empty_node () in
-    ignore (connect end2 final_node);
+    connect end2 final_node;
     
     if greedy then begin
-      ignore (connect start_node begin_loop);
-      ignore (connect start_node final_node);
+      connect start_node begin_loop;
+      connect start_node final_node;
     end
     else begin
-      ignore (connect start_node final_node);
-      ignore (connect start_node begin_loop);
+      connect start_node final_node;
+      connect start_node begin_loop;
     end;
 
     final_node
 
-and compile_reverse_graph (r:regex): graph_node * int =
+and compile_reverse_graph (r:regex): full_node * int =
   (* start node is the original accepting point that has pc=0 because it's the first that is being created *)
   let start_node = create_empty_node () in 
   let accept_node = create_node Accept in
@@ -455,7 +490,7 @@ type compiled_regex =
     (* data for the main expression *)
     main_ast: regex;
     main_bc: code;
-    reverse_graph: graph_node;
+    reverse_graph: full_node;
     rv_graph_size: int;
     main_cdns: cdns;
     (* lookaround data *)
