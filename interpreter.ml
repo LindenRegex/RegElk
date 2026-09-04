@@ -624,7 +624,8 @@ let rec advance_epsilon_graph (s:interpreter_state) (o:oracle) (dir:direction) :
           thread_survived := false;
        | Accept ->
             thread_survived := false;
-            s.bestmatch <- Some t;
+            if (Option.get t.half_node).id mod 2 = 0 then
+              s.bestmatch <- Some t;
        | CheckOracle l ->
           if not (get_oracle o s.cp l)
           then thread_survived := false;
