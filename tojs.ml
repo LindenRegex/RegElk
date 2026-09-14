@@ -48,13 +48,19 @@ let string_of_command (command:string) : string =
    !output
 
 
+let shell_quote s = "'" ^ String.concat "'\\''" (String.split_on_char '\'' s) ^ "'"
 (* getting its result as a string *)
-let get_js_result (raw:raw_regex) (str:string) : string =
-  let js_regex = print_js raw in
-  let js_regex = "'" ^ js_regex ^ "'" in (* adding quotes to escape special characters *)
-  let js_command = "timeout 5s node scripts_bench/jsmatcher.js " ^ js_regex ^ " " ^ "'"^str^"'" in
-  let result = string_of_command(js_command) in
-  if (String.length result = 0) then "Timeout\n\n" else result
+let get_js_result (raw:raw_regex) (str:string) (max_groups:int) : match_result list =
+  let out = String.trim (string_of_command (Printf.sprintf
+    "timeout 5s node scripts_bench/jsmatcher.js %s '' %d %s"
+    (shell_quote (print_js raw)) max_groups (shell_quote str))) in
+  match List.rev (String.split_on_char '\n' out) with
+  | "END" :: _ when String.starts_with ~prefix:"Error" out -> failwith (Printf.sprintf "JS error: %s" out)
+  | "END" :: rev_body -> 
+      List.rev_map (fun l ->
+        Array.of_list (List.map int_of_string (String.split_on_char ' ' l))
+      ) (List.filter (fun l -> String.length l > 0) rev_body)
+  | _ -> failwith "Timeout"
 
 (* calling the JS timer that starts and ends its timer just before and after matching the regex *)
 let get_time_js (raw:raw_regex) (str:string) : string =
@@ -77,30 +83,31 @@ type compare_result =
 
 
 let compare_js_ocaml (raw:raw_regex) (str:string) : compare_result =
-  (* saving the values of debug and verbose *)
-  (* because this compares the output string, verbose and debug needs to be turned off *)
-  let dbg_save = !debug in
-  let ver_save = !verbose in
-  debug := false;
-  verbose := false;
+  let dbg_save = !debug and ver_save = !verbose in
+  debug := false; verbose := false;
 
   Printf.printf "\027[36mRegex:\027[0m %s || " (print_regex (annotate raw));
   Printf.printf "\027[36mJS Regex:\027[0m %s || " (print_js raw);
   Printf.printf "\027[36mString:\027[0m \"%s\"\n%!" str;
   Printf.printf "%s\n%!" (report_raw raw);
-  let sjs = get_js_result raw str in
-  Printf.printf "\027[35mJS result:\027[0m\n%s%!" sjs;
-  let sl = Interpreter.get_linear_result raw str in
-  Printf.printf "\027[35mLinear result:\027[0m\n%s%!" sl;
-  let result = if (String.compare sjs "Timeout\n\n" = 0) then Timeout
-               else if (String.compare sjs sl = 0) then Equal else Error in
 
-  (* resetting flag values *)
+  let max_groups = max_group (annotate raw) in
+  let js_matches = get_js_result raw str max_groups 
+  in
+  let js_result_str = Interpreter.print_cap_option js_matches max_groups str in
+  Printf.printf "\027[35mJS result:\027[0m\n%s%!" js_result_str;
+  flush stdout;
+
+  let linear_matches = Interpreter.full_match raw str in
+  let linear_result_str = Interpreter.print_cap_option linear_matches max_groups str in
+  Printf.printf "\027[35mLinear result:\027[0m\n%s%!" linear_result_str;
+
+  let result = if js_result_str = linear_result_str then Equal else Error in
+
   debug := dbg_save;
   verbose := ver_save;
   result
 
-let shell_quote s = "'" ^ String.concat "'\\''" (String.split_on_char '\'' s) ^ "'"
 
 let get_js_all_matches (raw:raw_regex) (str:string) (max_groups:int) : match_result list =
   let out = String.trim (string_of_command (Printf.sprintf
@@ -124,11 +131,14 @@ let compare_js_ocaml_all ?(algo=Clemele) (raw:raw_regex) (str:string) : compare_
 
   let max_groups = max_group (annotate raw) in
   let js_all_matches = get_js_all_matches raw str max_groups in
-  Printf.printf "\027[35mJS result:\027[0m\n%s%!" (FindAll.print_all_matches js_all_matches raw str);
+  let js_all_matches_str = FindAll.print_all_matches js_all_matches raw str in
+  Printf.printf "\027[35mJS result:\027[0m\n%s%!" js_all_matches_str;
+  flush stdout;
   let ocaml_all_matches = FindAll.find_all algo raw str in
-  Printf.printf "\027[35mLinear result:\027[0m\n%s%!" (FindAll.print_all_matches ocaml_all_matches raw str);
+  let ocaml_all_matches_str = FindAll.print_all_matches ocaml_all_matches raw str in
+  Printf.printf "\027[35mLinear result:\027[0m\n%s%!" ocaml_all_matches_str;
    
-  let result = if js_all_matches = ocaml_all_matches then Equal
+  let result = if js_all_matches_str = ocaml_all_matches_str then Equal
                else Error in
 
     debug := dbg_save;

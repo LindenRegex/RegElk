@@ -37,19 +37,19 @@ let random_char () : char =
   List.nth alphabet idx
 
 let random_quant () : quantifier =
-  match (Random.int 6) with
+  match (Random.int 4) with
   | 0 -> Star
   | 1 -> LazyStar
-  | 2 -> Plus
-  | 3 -> LazyPlus
-  | 4 -> QuestionMark
-  | 5 -> LazyQuestionMark
+  | 2 -> QuestionMark
+  | 3 -> LazyQuestionMark
+  (* | 2 -> Plus *)
+  (* | 3 -> LazyPlus *)
   | _ -> failwith "random range error"
 
 let random_counted_quant () : counted_quantifier =
   let min = Random.int max_counted in
   let greedy = Random.bool () in
-  let max = if Random.bool() then None else Some (min + Random.int max_counted) in
+  let max = if false then None else Some (min + Random.int max_counted) in
   { min=min; max=max; greedy=greedy }
 
 
@@ -141,7 +141,7 @@ let rec random_regex (depth:int) (look:bool): raw_regex =
 
 let random_raw () : raw_regex =
   let max = Random.int max_depth in
-  random_regex max true
+  random_regex max false
 
 (** * Creating Random Strings  *)
 

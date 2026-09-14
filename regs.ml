@@ -141,6 +141,11 @@ module List_Regs =
 
     (* O(r*s) *)
     let to_arrays (regs:regs) : int Array.t * int Array.t =
+      let rec remove_tail (l:(int*int*int) list) : (int*int*int) list = 
+        match l with
+          | [] -> []
+          | (k,_,_)::l' -> if k = -2 then l' else remove_tail l'
+      in
       let a_cp = Array.make regs.size (-1) in
       let a_clk = Array.make regs.size (-1) in
       let rec fill_array (l:(int*int*int) list) : (int*int*int) list =
@@ -148,13 +153,14 @@ module List_Regs =
         | [] -> []
         | (k,cp,clk)::l' ->
            (* only setting reg values that haven't been set yet *)
-           if (a_cp.(k) = -1) then a_cp.(k) <- cp;
-           if (a_clk.(k) = -1) then a_clk.(k) <- clk;
-
-           if k==0 then l'
-           else fill_array l' in
-
-      regs.setlist <- fill_array regs.setlist;
+           if k = -1 then l'
+           else begin
+            if (a_cp.(k) = -1) then a_cp.(k) <- cp;
+            if (a_clk.(k) = -1) then a_clk.(k) <- clk;
+            fill_array l'
+           end
+      in
+      regs.setlist <- fill_array (remove_tail regs.setlist);
       (a_cp, a_clk)
 
     let to_string (regs:regs) : string =
@@ -162,7 +168,7 @@ module List_Regs =
       match l with
       | [] -> ""
       | (k,cp,clk)::l' ->
-         "(" ^ string_of_int k ^ "," ^ string_of_int cp ^ ")::" ^ to_string_rec l'
+         "(" ^ string_of_int k ^ "," ^ string_of_int cp ^ "," ^ string_of_int clk ^ ")::" ^ to_string_rec l'
       in
       to_string_rec regs.setlist
 

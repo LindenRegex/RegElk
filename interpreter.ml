@@ -18,7 +18,8 @@ open Flags
 module type INTERP = sig
   val regs_name : unit -> string
   val get_op : int array -> int -> int option
-  val print_cap_regs : ?show_substring:bool -> int array -> int -> string -> string  
+  val print_cap_regs : ?show_substring:bool -> int array -> int -> string -> string 
+  val print_cap_option : (int Array.t) list -> int -> string -> string 
   val build_oracle : compiled_regex -> string -> oracle
   val build_capture : compiled_regex -> string -> oracle -> (int Array.t) list
   val matcher : compiled_regex -> string -> (int Array.t) list
@@ -266,9 +267,9 @@ let print_cap_regs ?(show_substring=true) (c:int array) (max_groups:int) (str:st
     let endr = get_op c (end_reg i) in
     let range_str = 
       match startr, endr with
-      | None, None -> "Undefined  "
-      | Some s, Some e -> Printf.sprintf "[%d,%d]  " s e
-      | _ -> failwith "startreg is set but not endreg"
+      | Some s, Some e -> Printf.sprintf "[%d,%d]  " (min s e) (max s e)
+      | Some _, None -> failwith "startreg is set but not endreg"
+      | _ -> "Undefined  "
     in
     Buffer.add_string b ("#" ^ string_of_int i ^ ":" ^ range_str);
     if show_substring then begin
@@ -298,6 +299,8 @@ let print_result (r:regex) (str:string) (c:(int Array.t) list) : string =
 
 (* modifies regs in-place *)
 let rec filter_capture (r:regex) (cap_regs:int Array.t) (cap_clocks: int Array.t) (look_clocks:int Array.t) (quant_clocks:int Array.t) (maxclock:int) : unit =
+  (* Printf.printf "%s\n" (print_regex r) ;
+  flush stdout; *)
   match r with
   | Re_empty | Re_character _ | Re_anchor _ -> ()
   | Re_alt (r1,r2) -> filter_capture r1 cap_regs cap_clocks look_clocks quant_clocks maxclock;
@@ -345,9 +348,16 @@ and filter_all (r:regex) (regs:int Array.t) : unit = (* clearing all capture gro
 (* we transform the registers to an Array with constant-time access and insertion when filtering *)
 let filter_reset (r:regex) (capture:Regs.regs) (look:Regs.regs) (quant:Regs.regs) (maxclock:int) : int Array.t list =
   let rec loop acc  =
+    (* Printf.printf "capture before to_arrays: %s\n%!" (Regs.to_string capture);
+    Printf.printf "look_cl before to_arrays: %s\n%!" (Regs.to_string look);
+    Printf.printf "quantss before to_arrays: %s\n%!" (Regs.to_string quant); *)
     let (cap_regs, cap_clocks) = Regs.to_arrays capture in
     let (_, look_clocks) = Regs.to_arrays look in
     let (_, quant_clocks) = Regs.to_arrays quant in
+    (* Printf.printf "capture after to_arrays: %s\n%!" (debug_regs [cap_regs]);
+    Printf.printf "cap_clk after to_arrays: %s\n%!" (debug_regs [cap_clocks]);
+    Printf.printf "look_cl after to_arrays: %s\n%!" (debug_regs [look_clocks]);
+    Printf.printf "quantss after to_arrays: %s\n%!\n----------------\n" (debug_regs [quant_clocks]); *)
     if Regs.name <> "ListRegs" then begin
       filter_capture r cap_regs cap_clocks look_clocks quant_clocks maxclock;
       (Array.copy cap_regs)::acc
@@ -402,7 +412,19 @@ let rec advance_epsilon (c:code) (s:interpreter_state) (o:oracle) (dir:direction
           advance_epsilon c s o dir
        | SetRegisterToCP r ->
           (* modifying the capture regs of the current thread *)
+          if r = 0 then begin
+            (* zero is the special assertion to find the beggining of the lookaround and quantifier histories too *)
+            t.capture_regs <- Regs.set_reg t.capture_regs (-1) (Some s.cp) s.clock;
+            t.look_regs <- Regs.set_reg t.look_regs (-1) (Some s.cp) s.clock;
+            t.quant_regs <- Regs.set_reg t.quant_regs (-1) None s.clock;
+          end;
           t.capture_regs <- Regs.set_reg t.capture_regs r (Some s.cp) s.clock;
+          if r = 1 then begin
+            (* zero is the special assertion to find the beggining of the lookaround and quantifier histories too *)
+            t.capture_regs <- Regs.set_reg t.capture_regs (-2) (Some s.cp) s.clock;
+            t.look_regs <- Regs.set_reg t.look_regs (-2) (Some s.cp) s.clock;
+            t.quant_regs <- Regs.set_reg t.quant_regs (-2) None s.clock;
+          end;
           t.pc <- t.pc + 1;
           advance_epsilon c s o dir
        | SetQuantToClock (q,b) ->

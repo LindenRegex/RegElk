@@ -22,7 +22,15 @@ end = struct
   module CMP = Tojs.Compare(Interpreter)(FindAll)
 
 (** * Manual Testing *)
-
+let my_tests () =
+  let raw2 = Raw_count({min=1;max=None;greedy=true},Raw_capture(Raw_anchor(NonWordBoundary))) in
+  let str2 = "ab" in
+  ignore(CMP.compare_engines_all raw2 str2);
+  let raw = Raw_count({min=3;max=Some 5;greedy=true},Raw_alt(Raw_capture(Raw_anchor(WordBoundary)),Raw_capture(Raw_character(Char('a'))))) in
+  let str = "a" in
+  ignore(CMP.compare_engines_all raw str)
+  
+  
 let oracle_tests () =
   let o = create_oracle 4 8 in
   assert (Array.length o = 5);
@@ -321,6 +329,7 @@ let replay_stuck (l:(raw_regex*string) list) =
 
 let tests () =
   Printf.printf "\027[32mTests: \027[0m\n\n";
+  my_tests();
   oracle_tests();
   regex_tests();
   bytecode_tests();

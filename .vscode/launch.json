@@ -2,11 +2,21 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "OCaml tests",
+      "type": "ocaml.earlybird",
+      "request": "launch",
+      "program": "${workspaceFolder}/_build/default/tests.bc",
+      "arguments": [],
+      "cwd": "${workspaceFolder}",
+      "stopOnEntry": false
+    },
+    {
       "name": "OCaml Clemele",
       "type": "ocaml.earlybird",
       "request": "launch",
       "program": "${workspaceFolder}/_build/default/main.bc",
       "arguments": ["-all", "clemele"],
+      "cwd": "${workspaceFolder}",
       "stopOnEntry": false
     }
   ]
