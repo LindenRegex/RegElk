@@ -37,13 +37,13 @@ let random_char () : char =
   List.nth alphabet idx
 
 let random_quant () : quantifier =
-  match (Random.int 4) with
+  match (Random.int 6) with
   | 0 -> Star
   | 1 -> LazyStar
-  | 2 -> QuestionMark
-  | 3 -> LazyQuestionMark
-  (* | 2 -> Plus *)
-  (* | 3 -> LazyPlus *)
+  | 2 -> Plus
+  | 3 -> LazyPlus
+  | 4 -> QuestionMark
+  | 5 -> LazyQuestionMark
   | _ -> failwith "random range error"
 
 let random_counted_quant () : counted_quantifier =

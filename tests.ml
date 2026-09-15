@@ -23,12 +23,20 @@ end = struct
 
 (** * Manual Testing *)
 let my_tests () =
-  let raw2 = Raw_count({min=1;max=None;greedy=true},Raw_capture(Raw_anchor(NonWordBoundary))) in
-  let str2 = "ab" in
+  let raw3 = Raw_quant(Plus,Raw_quant(Plus,Raw_capture(Raw_anchor(WordBoundary)))) in
+  let str3 = "a" in
+  ignore(CMP.compare_engines_all raw3 str3);
+
+  let raw2 = Raw_quant(Plus,Raw_capture(Raw_empty)) in
+  let str2 = "a" in
   ignore(CMP.compare_engines_all raw2 str2);
   let raw = Raw_count({min=3;max=Some 5;greedy=true},Raw_alt(Raw_capture(Raw_anchor(WordBoundary)),Raw_capture(Raw_character(Char('a'))))) in
   let str = "a" in
   ignore(CMP.compare_engines_all raw str)
+
+  (* let raw2 = Raw_lookaround(Lookbehind,Raw_capture(Raw_anchor(BeginInput)))in
+  let str2 = "" in
+  ignore(CMP.compare_engines_all raw2 str2); *)
   
   
 let oracle_tests () =
