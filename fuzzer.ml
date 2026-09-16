@@ -22,9 +22,9 @@ let alphabet = ['a'; 'b'; '-']
 
 let max_depth = 50
 
-let max_string = 100
+let max_string = 20
 
-let max_tests = ref 1000
+let max_tests = ref 100000
 
 let max_counted = 10
 

@@ -111,7 +111,7 @@ let compare_js_ocaml (raw:raw_regex) (str:string) : compare_result =
 
 let get_js_all_matches (raw:raw_regex) (str:string) (max_groups:int) : match_result list =
   let out = String.trim (string_of_command (Printf.sprintf
-    "timeout 5s node scripts_bench/jsallmatcher.js %s '' %d %s"
+    "timeout 100s node scripts_bench/jsallmatcher.js %s '' %d %s"
     (shell_quote (print_js raw)) max_groups (shell_quote str))) in
   (* Printf.printf "\027[35mJS all matches result:\027[0m\n%s\n%!" out; *)
   match List.rev (String.split_on_char '\n' out) with

@@ -347,20 +347,20 @@ and filter_all (r:regex) (regs:int Array.t) : unit = (* clearing all capture gro
 
 (* we transform the registers to an Array with constant-time access and insertion when filtering *)
 let filter_reset (r:regex) (capture:Regs.regs) (look:Regs.regs) (quant:Regs.regs) (maxclock:int) : int Array.t list =
-  let capture = Regs.sort_by_clk capture in
+  (* let capture = Regs.sort_by_clk capture in
   let look = Regs.sort_by_clk look in
-  let quant = Regs.sort_by_clk quant in
+  let quant = Regs.sort_by_clk quant in *)
   let rec loop acc  =
-    (* Printf.printf "capture before to_arrays: %s\n%!" (Regs.to_string capture);
+    Printf.printf "capture before to_arrays: %s\n%!" (Regs.to_string capture);
     Printf.printf "look_cl before to_arrays: %s\n%!" (Regs.to_string look);
-    Printf.printf "quantss before to_arrays: %s\n%!" (Regs.to_string quant); *)
+    Printf.printf "quantss before to_arrays: %s\n%!" (Regs.to_string quant);
     let (cap_regs, cap_clocks) = Regs.to_arrays capture in
     let (_, look_clocks) = Regs.to_arrays look in
     let (_, quant_clocks) = Regs.to_arrays quant in
-    (* Printf.printf "capture after to_arrays: %s\n%!" (debug_regs [cap_regs]);
+    Printf.printf "capture after to_arrays: %s\n%!" (debug_regs [cap_regs]);
     Printf.printf "cap_clk after to_arrays: %s\n%!" (debug_regs [cap_clocks]);
     Printf.printf "look_cl after to_arrays: %s\n%!" (debug_regs [look_clocks]);
-    Printf.printf "quantss after to_arrays: %s\n%!\n----------------\n" (debug_regs [quant_clocks]); *)
+    Printf.printf "quantss after to_arrays: %s\n%!\n----------------\n" (debug_regs [quant_clocks]);
     if Regs.name <> "ListRegs" then begin
       filter_capture r cap_regs cap_clocks look_clocks quant_clocks maxclock;
       (Array.copy cap_regs)::acc
@@ -436,7 +436,6 @@ let rec advance_epsilon (c:code) (plus_bc:code Array.t) (s:interpreter_state) (o
           (* adding the last iteration clock *)
           t.quant_regs <- Regs.set_reg t.quant_regs q ocp s.clock;
           t.pc <- t.pc + 1;
-          if b then s.clock <- s.clock + 2 * (Array.length plus_bc.(q));
           advance_epsilon c plus_bc s o dir
        | CheckOracle l ->
           if (get_oracle o s.cp l)
@@ -575,74 +574,92 @@ let rec find_match (c:code) (plus_bc:code Array.t) (str:string) (s:interpreter_s
 (* so that we can reconstruct exactly the plusses that are defined inside that AST *)
 
 let reconstruct_plus_groups (thread:thread) (ast:regex) (plus_bc:code Array.t) (s:string) (o:oracle) (dir:direction): thread =
-  let capture = ref thread.capture_regs in
-  let look = ref thread.look_regs in
-  let quant = ref thread.quant_regs in
+  let capture_list = Regs.divide thread.capture_regs in
+  let look_list = Regs.divide thread.look_regs in
+  let quant_list = Regs.divide thread.quant_regs in
   (* goes through the regex, if it encounters a nulled +, it calls the null interpreter *)
-  let rec nulled_plus (reg:regex) : unit =
+  let rec nulled_plus (reg:regex) (capture:Regs.regs ref) (look:Regs.regs ref) (quant:Regs.regs ref): unit =
     match reg with
     | Re_empty | Re_character _ -> ()
     | Re_alt (r1, r2) | Re_con (r1, r2) ->
-       nulled_plus r1; nulled_plus r2
-    | Re_capture (_,r1) -> nulled_plus r1
-    | Re_lookaround (lid,lk,r1) -> ()
+       nulled_plus r1 capture look quant;
+       nulled_plus r2 capture look quant
+    | Re_capture (_,r1) -> nulled_plus r1 capture look quant
+    | Re_lookaround (_,_,_) -> ()
     | Re_anchor _ -> ()
     (* from shallowest to deepest plus: *)
-    | Re_quant (nul,qid,quanttype,body) ->
-       let history = Regs.get_history !quant qid in
-       if history = [] then
-        nulled_plus body (* recursive call: an inner + may have been nulled *)
-       else
-        List.iter (fun (start_cp, start_clock) ->
-           if !debug then Printf.printf ("QID: %d | start_clock: %d\n") qid start_clock;
-           let bytecode = plus_bc.(qid) in
-           let ctx = cp_context start_cp s dir in
-           let inits = init_state bytecode start_cp !capture !look !quant start_clock ctx in
-           let subcdn = compile_cdns body in
-           let subtable = build_cdn subcdn start_cp o ctx dir in
-           inits.cdn <- subtable;
-           let result = null_interp bytecode plus_bc inits o dir in
-           begin match result with
-           | None -> failwith "expected a nullable plus"
-           | Some w ->
+    | Re_quant (_,qid,_,body) ->
+       begin match (Regs.get_cp !quant qid) with
+       | None -> nulled_plus body capture look quant (* recursive call: an inner + may have been nulled *)
+       | Some start_cp ->         (* the last iteration of the plus was nulling *)
+          let start_clock = int_of_opt (Regs.get_clock !quant qid) in
+          if !debug then Printf.printf ("QID: %d | start_clock: %d\n") qid start_clock;
+          let bytecode = plus_bc.(qid) in
+          let ctx = cp_context start_cp s dir in
+          let inits = (init_state bytecode start_cp !capture !look !quant start_clock ctx) in
+          let subcdn = compile_cdns body in
+          let subtable = build_cdn subcdn start_cp o ctx dir in
+          inits.cdn <- subtable;
+          let result = null_interp bytecode plus_bc inits o dir in
+          begin match result with
+          | None -> failwith "expected a nullable plus"
+          | Some w ->             (* there's a winning thread when nulling *)
+             (* updating all registers *)
              capture := w.capture_regs;
              look := w.look_regs;
              quant := w.quant_regs;
-           end;
-           nulled_children body subtable start_cp
-          ) history
+          end;
+          nulled_children body subtable start_cp capture look quant
+       end
   (* goes through the subregex when a plus above was nulled *)
   (* for all its children that got nulled while nulling the parent plus, *)
   (* the CDN table can be shared *)
-  and nulled_children (reg:regex) (cdnt:cdn_table) (cp:int) : unit =
+  and nulled_children (reg:regex) (cdnt:cdn_table) (cp:int) (capture:Regs.regs ref) (look:Regs.regs ref) (quant:Regs.regs ref) : unit =
     match reg with
     | Re_empty | Re_character _ -> ()
     | Re_alt (r1, r2) | Re_con (r1, r2) ->
-       nulled_children r1 cdnt cp; nulled_children r2 cdnt cp
-    | Re_capture (_,r1) -> nulled_children r1 cdnt cp
-    | Re_lookaround (lid,lk,r1) -> ()
+       nulled_children r1 cdnt cp capture look quant; nulled_children r2 cdnt cp capture look quant
+    | Re_capture (_,r1) -> nulled_children r1 cdnt cp capture look quant
+    | Re_lookaround (_,_,_) -> ()
     | Re_anchor _ -> ()
-    | Re_quant (nul,qid,quanttype,body) ->
-       List.iter (fun (start_cp, start_clock) ->
-          if start_cp = cp then begin
-           let bytecode = plus_bc.(qid) in
-           let ctx = cp_context cp s dir in
-           let inits = init_state bytecode cp !capture !look !quant start_clock ctx in
-           inits.cdn <- cdnt;
-           let result = null_interp bytecode plus_bc inits o dir in
-           begin match result with
-           | None -> failwith "expected a nullable children plus"
-           | Some w ->
-             capture := w.capture_regs;
-             look := w.look_regs;
-             quant := w.quant_regs;
-           end;
-           nulled_children body cdnt cp
-          end
-        ) (Regs.get_history !quant qid)
+    | Re_quant (_,qid,_,body) ->
+       begin match (Regs.get_cp !quant qid) with
+       | None -> nulled_children body cdnt cp capture look quant
+       | Some start_cp ->
+          if (start_cp = cp) then begin
+              (* otherwise we don't have to reconstruct, it was nulled in a previous iteration *)
+              let start_clock = int_of_opt (Regs.get_clock !quant qid) in
+              let bytecode = plus_bc.(qid) in
+              let ctx = cp_context cp s dir in
+              let inits = (init_state bytecode cp !capture !look !quant start_clock ctx) in
+              inits.cdn <- cdnt;
+              let result = null_interp bytecode plus_bc inits o dir in
+              begin match result with
+              | None -> failwith "expected a nullable children plus"
+              | Some w ->             (* there's a winning thread when nulling *)
+                 (* updating all registers *)
+                 capture := w.capture_regs;
+                 look := w.look_regs;
+                 quant := w.quant_regs;
+              end;
+              nulled_children body cdnt cp capture look quant
+            end
+          else ()
+       end
   in
-  nulled_plus ast;
-  {pc = thread.pc; capture_regs = !capture; look_regs = !look; quant_regs = !quant; exit_allowed = thread.exit_allowed}
+
+  let rec loop (capture_l: Regs.regs list) (look_l: Regs.regs list) (quant_l: Regs.regs list) =
+    match capture_l, look_l, quant_l with
+    | [], [], [] -> ()
+    | capture :: capture_rest, look :: look_rest, quant :: quant_rest ->
+        nulled_plus ast (ref capture) (ref look) (ref quant);
+        loop capture_rest look_rest quant_rest
+    | _ -> failwith "Lists must have the same length" in
+
+  loop capture_list look_list quant_list;
+  
+
+  {pc = thread.pc; capture_regs = Regs.combine capture_list; look_regs = Regs.combine look_list; quant_regs = Regs.combine quant_list; exit_allowed = thread.exit_allowed}
 
 
 (** * Finds a match in an a bytecode automaton AND reconstructs the corresponding plus groups  *)

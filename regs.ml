@@ -28,6 +28,8 @@ module type REGS =
     val get_history: regs -> int -> (int * int) list
     val copy: regs -> regs
     val to_arrays: regs -> int Array.t * int Array.t
+    val divide: regs -> regs list
+    val combine: regs list -> regs
     val to_string: regs -> string (* for debugging purposes *)
     val name: string
   end
@@ -82,6 +84,13 @@ module Array_Regs =
       match get_cp regs k, get_clock regs k with
       | Some cp, Some clk -> [cp, clk]
       | _ -> []
+
+    let divide (regs:regs): regs list =
+      [regs]
+    let combine (regs_list:regs list): regs =
+      match regs_list with
+      | [x] -> x
+      | _ -> failwith "Should have exactly one reg"
 
     (* O(r) *)
     let copy (regs:regs) : regs =
@@ -163,7 +172,30 @@ module List_Regs =
     (* O(1) *)
     let copy (regs:regs) : regs =
       { setlist = regs.setlist; size = regs.size }
+    let divide (regs : regs) : regs list =
+      let close acc seg = { setlist = List.rev seg; size = regs.size } :: acc in
+      let rec go acc current = function
+        | [] -> List.rev acc
+        | (-2, _, _) :: rest -> go acc (Some []) rest
+        | (-1, _, _) :: rest ->
+          (match current with
+          | None -> go acc None rest
+          | Some seg -> go (close acc seg) None rest)
+        | x :: rest ->
+          (match current with
+          | None -> go acc None rest
+          | Some seg -> go acc (Some (x :: seg)) rest)
+      in
+      go [] None regs.setlist
 
+let combine (regs_list : regs list) : regs =
+  let combined_setlist =
+    List.concat_map
+      (fun regs -> ((-2, -1, -1) :: regs.setlist) @ [ (-1, -1, -1) ])
+      regs_list
+  in
+  { setlist = combined_setlist;
+    size = (match regs_list with [] -> 2 | h :: _ -> h.size) }
     (* O(r*s) *)
     let to_arrays (regs:regs) : int Array.t * int Array.t =
       let rec remove_tail (l:(int*int*int) list) : (int*int*int) list = 
@@ -243,7 +275,13 @@ module Map_Regs =
     (* O(1) *)
     let copy (regs:regs) : regs =
       { valmap = regs.valmap; size = regs.size }
-
+    
+    let divide (regs:regs): regs list =
+      [regs]
+    let combine (regs_list:regs list): regs =
+      match regs_list with
+      | [x] -> x
+      | _ -> failwith "Should have exactly one reg"
     (* O(r) *)
     let to_arrays (regs:regs) : int Array.t * int Array.t =
       let a_cp = Array.make regs.size (-1) in

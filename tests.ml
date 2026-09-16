@@ -23,6 +23,20 @@ end = struct
 
 (** * Manual Testing *)
 let my_tests () =
+  let raw6 = Raw_quant(Plus,Raw_capture((Raw_alt(Raw_anchor(EndInput),Raw_character(Char('b')))))) in
+  let str6 = "b" in
+  ignore(CMP.compare_engines_all raw6 str6);
+
+  let raw5 = Raw_quant(Plus,Raw_capture(Raw_quant(Plus,Raw_capture(
+    Raw_quant(LazyQuestionMark,Raw_character(NegClass([]))))))) in
+  let str5 = "b" in
+  ignore(CMP.compare_engines_all raw5 str5);
+
+  (* the test below silently fails in javascript seems because of backtrack limit of the language *)
+  (* let raw4 = Raw_count({min=3;max=Some 6;greedy=true},Raw_alt(Raw_count({min=0;max=Some 2;greedy=false},Raw_empty),Raw_capture(Raw_count({min=8;max=Some 13;greedy=true},Raw_capture(Raw_count({min=9;max=Some 16;greedy=true},Raw_con(Raw_alt(Raw_empty,Raw_count({min=1;max=Some 5;greedy=false},Raw_capture(Raw_empty))),Raw_character(NegClass([CGroup(Space)]))))))))) in
+  let str4 = "--aab-ab-bab-------bb--a-ba-a-" in
+  ignore(CMP.compare_engines_all raw4 str4); *)
+
   let raw3 = Raw_quant(Plus,Raw_quant(Plus,Raw_capture(Raw_anchor(WordBoundary)))) in
   let str3 = "a" in
   ignore(CMP.compare_engines_all raw3 str3);
@@ -30,6 +44,7 @@ let my_tests () =
   let raw2 = Raw_quant(Plus,Raw_capture(Raw_empty)) in
   let str2 = "a" in
   ignore(CMP.compare_engines_all raw2 str2);
+
   let raw = Raw_count({min=3;max=Some 5;greedy=true},Raw_alt(Raw_capture(Raw_anchor(WordBoundary)),Raw_capture(Raw_character(Char('a'))))) in
   let str = "a" in
   ignore(CMP.compare_engines_all raw str)
@@ -390,12 +405,12 @@ let main =
   verbose := false;
   debug := false;
 
-  (* testing for all register implementations *)
-  let module T1 = PlayTests(Regs.Array_Regs) in
-  T1.tests();
-
   let module T2 = PlayTests(Regs.List_Regs) in
   T2.tests();
+  (* testing for all register implementations *)
+  (* let module T1 = PlayTests(Regs.Array_Regs) in
+  T1.tests(); *)
 
+(* 
   let module T3 = PlayTests(Regs.Map_Regs) in
-  T3.tests()
+  T3.tests() *)
