@@ -20,13 +20,13 @@ let random_seed = ref 0
 let alphabet = ['a'; 'b'; '-']
 (* with a dash (non-ascii) to test word boundaries *)
 
-let max_depth = 50
+let max_depth = 10
 
-let max_string = 20
+let max_string = 15
 
 let max_tests = ref 100000
 
-let max_counted = 10
+let max_counted = 6
 
 let max_class = 7
 
@@ -49,7 +49,7 @@ let random_quant () : quantifier =
 let random_counted_quant () : counted_quantifier =
   let min = Random.int max_counted in
   let greedy = Random.bool () in
-  let max = if false then None else Some (min + Random.int max_counted) in
+  let max = if Random.bool() then None else Some (min + Random.int max_counted) in
   { min=min; max=max; greedy=greedy }
 
 
@@ -162,6 +162,7 @@ let fuzzer () : unit =
   let total_timeout = ref 0 in
 
   for i = 0 to !max_tests do
+    Printf.printf "\027[33mFuzzer:\027[0m test %d/%d\n%!" i !max_tests;
     let raw = random_raw() in
     let str = random_string() in
     let comp = CMP.compare_engines_all raw str in

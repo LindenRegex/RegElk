@@ -18,14 +18,12 @@ module IntMap = Map.Make(struct type t = int let compare = compare end)
 module type REGS =
   sig
     type regs
-    val sort_by_clk: regs -> regs
     val init_regs: int -> regs
     val set_reg: regs -> int -> int option -> int -> regs
     val clear_reg: regs -> int -> regs
     (* we might remove get_cp and get_clock and always convert to an array first for filtering *)
     val get_cp: regs -> int -> int option
     val get_clock: regs -> int -> int option
-    val get_history: regs -> int -> (int * int) list
     val copy: regs -> regs
     val to_arrays: regs -> int Array.t * int Array.t
     val divide: regs -> regs list
@@ -51,9 +49,7 @@ module Array_Regs =
     type regs =
       { a_cp: int Array.t;
         a_clk: int Array.t }
-    (* just return the  same regs*)
-    let sort_by_clk (regs:regs) : regs =
-      regs
+
     (* O(r) *)
     let init_regs (size:int) : regs =
       { a_cp = Array.make size (-1); a_clk = Array.make size (-1)}
@@ -79,11 +75,6 @@ module Array_Regs =
     let get_clock (regs:regs) (k:int) : int option =
       let v = regs.a_clk.(k) in
       opt_of_int v
-
-    let get_history (regs:regs) (k:int) : (int * int) list =
-      match get_cp regs k, get_clock regs k with
-      | Some cp, Some clk -> [cp, clk]
-      | _ -> []
 
     let divide (regs:regs): regs list =
       [regs]
@@ -119,9 +110,6 @@ module List_Regs =
       { mutable setlist: (int * int * int) list;
         size: int }
 
-    let sort_by_clk (regs:regs) : regs =
-      let sorted = List.sort (fun (_,_,clk1) (_,_,clk2) -> compare clk2 clk1) regs.setlist in
-      { setlist = sorted; size = regs.size }
     (* O(1) *)
     let init_regs (size:int) : regs =
      {setlist = []; size = size}
@@ -156,19 +144,6 @@ module List_Regs =
            else get_rec l' in
       get_rec regs.setlist
 
-    let get_history (regs:regs) (k:int) : (int * int) list =
-      let rec get_rec history = function
-        | [] -> List.rev history
-        | (key, cp, clk)::tail ->
-           if key = k then
-             match opt_of_int cp with
-             | Some cp -> get_rec ((cp, clk)::history) tail
-             | None -> get_rec history tail
-           else
-             get_rec history tail
-      in
-      get_rec [] regs.setlist
-
     (* O(1) *)
     let copy (regs:regs) : regs =
       { setlist = regs.setlist; size = regs.size }
@@ -197,6 +172,7 @@ let combine (regs_list : regs list) : regs =
   { setlist = combined_setlist;
     size = (match regs_list with [] -> 2 | h :: _ -> h.size) }
     (* O(r*s) *)
+    (* gets the array for the last match and removes that part from the list*)
     let to_arrays (regs:regs) : int Array.t * int Array.t =
       let rec remove_tail (l:(int*int*int) list) : (int*int*int) list = 
         match l with
@@ -239,8 +215,7 @@ module Map_Regs =
       (* first int: cp value, second int: clk value *)
       { mutable valmap : (int * int) IntMap.t;
         size : int }
-    let sort_by_clk(regs:regs) : regs = 
-      regs
+
     (* O(1) *)
     let init_regs (size:int) : regs =
       { valmap = IntMap.empty; size = size }
@@ -266,11 +241,6 @@ module Map_Regs =
       match (IntMap.find_opt k regs.valmap) with
       | None -> None
       | Some (cp,clk) -> opt_of_int clk
-
-    let get_history (regs:regs) (k:int) : (int * int) list =
-      match get_cp regs k, get_clock regs k with
-      | Some cp, Some clk -> [cp, clk]
-      | _ -> []
 
     (* O(1) *)
     let copy (regs:regs) : regs =
