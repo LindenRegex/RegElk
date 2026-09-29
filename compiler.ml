@@ -191,10 +191,10 @@ let compile_to_bytecode (r:regex): code =
 
 (* same but with a WriteOracle instruction instead of an Accept *)
 (* l is the current lookid we are compiling the regex for *)
-let compile_to_write (r:regex) (l:lookid): code =
+(* let compile_to_write (r:regex) (l:lookid): code =
   let (c,_) = compile r 0 Progress in
   let full_c = tl_flatten c [WriteOracle l] in
-  Array.of_list full_c
+  Array.of_list full_c *)
 
 (* compiles the bytecode for reconstructing the missing groups from nulled + *)
 (* this recursively compiles the nested + *)
@@ -229,8 +229,8 @@ type compiled_regex =
 (* the regex used when builing the oracle *)
 let oracle_regex (looktype:lookaround) (l:regex): regex =
   match looktype with
-  | Lookahead | NegLookahead -> lazy_prefix (reverse_regex (remove_capture l))
-  | Lookbehind | NegLookbehind -> lazy_prefix (remove_capture l)
+  | Lookahead | NegLookahead ->  l
+  | Lookbehind | NegLookbehind ->  reverse_regex l
 
 (* the regex used when reconstructing capture groups *)
 let capture_regex (looktype:lookaround) (l:regex): regex =
@@ -257,7 +257,7 @@ let rec compile_extra_bytecode (r:regex) (c:compiled_regex): unit =
      (* both directions for building the oracle and reconstruct capture groups *)
      let build_reg = oracle_regex la body in
      let capture_reg = capture_regex la body in
-     let build_code = compile_to_write build_reg lid in
+     let build_code = compile_to_bytecode build_reg in
      let capture_code = compile_to_bytecode capture_reg in
      c.look_types.(lid) <- la;
      c.look_cdns.(lid) <- compile_cdns body;

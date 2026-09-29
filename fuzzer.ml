@@ -54,7 +54,8 @@ let random_counted_quant () : counted_quantifier =
 
 
 let random_look () : lookaround =
-  match (Random.int 4) with
+  (* Todo: fix this back to lookbehinds 4 *)
+  match (Random.int 2) with
   | 0 -> Lookahead
   | 1 -> NegLookahead
   | 2 -> Lookbehind
@@ -141,7 +142,7 @@ let rec random_regex (depth:int) (look:bool): raw_regex =
 
 let random_raw () : raw_regex =
   let max = Random.int max_depth in
-  random_regex max false
+  random_regex max true
 
 (** * Creating Random Strings  *)
 

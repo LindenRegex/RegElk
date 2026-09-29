@@ -46,7 +46,7 @@ type cdn_formula =
 
 
 (** * Evaluating CDN formulas  *)
-let rec interpret_cdn (f:cdn_formula) (cp:int) (o:oracle) (t:cdn_table) (ctx:char_context) (dir:direction): bool =
+let rec interpret_cdn (f:cdn_formula) (cp:int) (o:oracles) (t:cdn_table) (ctx:char_context) (dir:direction): bool =
   match f with
   | CDN_true -> true
   | CDN_false -> false
@@ -138,7 +138,7 @@ let compile_cdns (r:regex): cdns =
 
 (** * Building the CDN Table  *)
 (* the interpreter performs this at each step to know which CDN is nullable *)
-let rec build_cdn (cdns:cdns) (cp:int) (o:oracle) (ctx:char_context) (dir:direction): cdn_table =
+let rec build_cdn (cdns:cdns) (cp:int) (o:oracles) (ctx:char_context) (dir:direction): cdn_table =
   let table = ref (init_cdn()) in
   List.iter(fun (qid,formula) ->
       let eval = interpret_cdn formula cp o !table ctx dir in

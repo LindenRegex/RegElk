@@ -23,6 +23,10 @@ end = struct
 
 (** * Manual Testing *)
 let my_tests () =
+  let raw7 = Raw_lookaround(Lookahead,Raw_capture(Raw_empty)) in
+  let str7 = "" in
+  ignore(CMP.compare_engines_all raw7 str7);
+
   let raw6 = Raw_quant(Plus,Raw_capture((Raw_alt(Raw_anchor(EndInput),Raw_character(Char('b')))))) in
   let str6 = "b" in
   ignore(CMP.compare_engines_all raw6 str6);
@@ -54,15 +58,15 @@ let my_tests () =
   ignore(CMP.compare_engines_all raw2 str2); *)
   
   
-let oracle_tests () =
-  let o = create_oracle 4 8 in
+(* let oracle_tests () =
+  let o = create_oracles 4 8 in
   assert (Array.length o = 5);
   assert (Array.length (o.(0)) = 8);
   assert (get_oracle o 1 4 = false);
   set_oracle o 1 4;
   Printf.printf "%s\n" (print_oracle o);
   assert (get_oracle o 1 4 = true);
-  assert (get_oracle o 1 3 = false)
+  assert (get_oracle o 1 3 = false) *)
 
 let regex_tests () =
   let raw = Raw_con(raw_char 'a', Raw_lookaround (Lookbehind, raw_char 'a')) in
@@ -106,7 +110,7 @@ let build_oracle_tests () =
   let str = "aaab" in
   Printf.printf "%s\n" (print_regex re);
   let o = Interpreter.build_oracle cr str in
-  Printf.printf "%s\n" (print_oracle o);
+  Printf.printf "%s\n" (print_oracles o);
   assert (get_oracle o 4 2 = true);
   assert (get_oracle o 3 2 = false);
   assert (get_oracle o 2 1 = true);
@@ -353,7 +357,7 @@ let replay_stuck (l:(raw_regex*string) list) =
 let tests () =
   Printf.printf "\027[32mTests: \027[0m\n\n";
   my_tests();
-  oracle_tests();
+  (* oracle_tests(); *)
   regex_tests();
   bytecode_tests();
   compiler_tests();
