@@ -783,10 +783,10 @@ let find_match_plus (c:code) (ast:regex) (plus_bc:code Array.t) (s:string) (o:or
 
 let build_oracle (cr:compiled_regex) (str:string): oracles =
   let maxlook = max_lookaround cr.main_ast in
-  let look_cnts = cr.look_build_bc |> Array.map size in
+  let look_cnts = cr.look_bc |> Array.map size in
   let os = create_oracles (String.length str) (look_cnts) in
   for lid = maxlook downto 1 do
-    let bytecode = cr.look_build_bc.(lid) in
+    let bytecode = cr.look_bc.(lid) in
     (* let looktype = cr.look_types.(lid) in *)
     (* Todo: handle backward lookaround too*)
     let direction = Forward(*oracle_direction looktype*) in
@@ -851,30 +851,27 @@ let add_arr (regs:Regs.regs) (arr_regs: Array_Regs.regs): unit =
     if int_of_opt (Array_Regs.get_clock arr_regs i) <> -1 then
       ignore(Regs.set_reg regs i (Array_Regs.get_cp arr_regs i) (int_of_opt (Array_Regs.get_clock arr_regs i)));
   done
-  let rec update_regs (oracle_res:oracle_res) (lid:int) (capture_l: Regs.regs list) (look_l: Regs.regs list) (quant_l: Regs.regs list) (i:int)
-          : Regs.regs list * Regs.regs list * Regs.regs list =
-    match capture_l, look_l, quant_l with
-    | [], [], [] -> ([], [], [])
-    | capture :: capture_rest, look :: look_rest, quant :: quant_rest when Regs.get_cp look lid <> None->
-      let rc = ref capture and rl = ref look and rq = ref quant in
-      if i< 0 then failwith "the list and the array set values dont match"
 
-      else if oracle_res.(i).accept then  begin
-        add_arr !rc oracle_res.(i).capture;
-        add_arr !rl oracle_res.(i).lookaround;
-        add_arr !rq oracle_res.(i).quantifier;
-        let (capture_acc, look_acc, quant_acc) = 
-          update_regs oracle_res lid capture_rest look_rest quant_rest (i-1) in
-        (!rc :: capture_acc, !rl :: look_acc, !rq :: quant_acc)
-      end
-      else
-        update_regs oracle_res lid capture_l look_l quant_l (i-1)
+(* what is get_cp time complexity? *)
+let rec update_regs (oracle_res:oracle_res) (lid:int) (capture_l: Regs.regs list) (look_l: Regs.regs list) (quant_l: Regs.regs list)
+        : Regs.regs list * Regs.regs list * Regs.regs list =
+  match capture_l, look_l, quant_l with
+  | [], [], [] -> ([], [], [])
+  | capture :: capture_rest, look :: look_rest, quant :: quant_rest when Regs.get_cp look lid <> None->
+    let cp = Option.get (Regs.get_cp look lid) in
+    let rc = ref capture and rl = ref look and rq = ref quant in
+    add_arr !rc oracle_res.(cp).capture;
+    add_arr !rl oracle_res.(cp).lookaround;
+    add_arr !rq oracle_res.(cp).quantifier;
+    let (capture_acc, look_acc, quant_acc) =
+      update_regs oracle_res lid capture_rest look_rest quant_rest in
+    (!rc :: capture_acc, !rl :: look_acc, !rq :: quant_acc)
 
-    | capture :: capture_rest, look :: look_rest, quant :: quant_rest -> 
-      let (capture_acc, look_acc, quant_acc) = 
-        update_regs oracle_res lid capture_rest look_rest quant_rest i in
-      (capture :: capture_acc, look :: look_acc, quant :: quant_acc)      
-    | _ -> failwith "Lists must have the same length"
+  | capture :: capture_rest, look :: look_rest, quant :: quant_rest ->
+    let (capture_acc, look_acc, quant_acc) =
+      update_regs oracle_res lid capture_rest look_rest quant_rest in
+    (capture :: capture_acc, look :: look_acc, quant :: quant_acc)
+  | _ -> failwith "Lists must have the same length"
 (* returns the register array if there is a match *)
 (* also filters the return value for capture reset *)
 let build_capture (cr:compiled_regex) (str:string) (os:oracles): (int Array.t) list =
@@ -897,21 +894,24 @@ let build_capture (cr:compiled_regex) (str:string) (os:oracles): (int Array.t) l
     let look_list = ref (Regs.divide thread.look_regs) in
     let quant_list = ref (Regs.divide thread.quant_regs) in
     for lid=1 to max_look do
+      match cr.look_types.(lid) with
+      | Lookahead | Lookbehind ->
       let oracle_res = create_oracle_res (String.length str) in
       let cp_list = !look_list |> List.map (fun x -> Regs.get_cp x lid) in
       init_oracle_res oracle_res cp_list (2*max_cap+2) (max_look+1) (max_quant+1);
 
       let n = String.length str in
-      let m = Array.length cr.look_capture_bc.(lid) in
+      let m = Array.length cr.look_bc.(lid) in
       for i=0 to n do (* start dfs from accepting state *)
         let shared_res = create_match_result (2*max_cap+2) (max_look+1) (max_quant+1) in
-        dfs2 os.(lid) i (m - 1) shared_res oracle_res (n*m);
+        dfs2 os.(lid) i (m - 1) shared_res oracle_res ((n+1)*m);
       done;
       let (new_capture_list, new_look_list, new_quant_list) =
-        update_regs oracle_res lid !capture_list !look_list !quant_list ((Array.length oracle_res)-1) in
+        update_regs oracle_res lid !capture_list !look_list !quant_list in
       capture_list := new_capture_list;
       look_list := new_look_list;
       quant_list := new_quant_list;
+      |_ -> ();
     done;
     (* if !debug then
       begin

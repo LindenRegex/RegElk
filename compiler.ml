@@ -220,8 +220,7 @@ type compiled_regex =
     look_types: lookaround Array.t; (* the type of each lookaround *)
     look_ast: regex Array.t; (* the ast of each lookaround *)
     look_cdns: cdns Array.t; (* the cdns restricted to each lookaround *)
-    look_build_bc: code Array.t;    (* lookaround bytecodes for building the oracle *)
-    look_capture_bc: code Array.t; (* lookarounds bytecodes for constructing capture groups *)
+    look_bc: code Array.t;    (* lookaround bytecodes *)
     (* Plus data *)
     plus_bc: code Array.t;      (* CDN & CIN plus bytecode *)
   }
@@ -231,13 +230,6 @@ let oracle_regex (looktype:lookaround) (l:regex): regex =
   match looktype with
   | Lookahead | NegLookahead ->  l
   | Lookbehind | NegLookbehind ->  reverse_regex l
-
-(* the regex used when reconstructing capture groups *)
-let capture_regex (looktype:lookaround) (l:regex): regex =
-  match looktype with
-  | Lookahead -> l
-  | Lookbehind -> reverse_regex l
-  | _ -> Re_empty               (* no capture groups defined in negative lookarounds *)
 
 (* recursively sets the two kinds of bytecode for each lookaround and nullable plus *)
 let rec compile_extra_bytecode (r:regex) (c:compiled_regex): unit =
@@ -255,15 +247,12 @@ let rec compile_extra_bytecode (r:regex) (c:compiled_regex): unit =
      compile_extra_bytecode r1 c
   | Re_lookaround (lid, la, body) ->
      (* both directions for building the oracle and reconstruct capture groups *)
-     let build_reg = oracle_regex la body in
-     let capture_reg = capture_regex la body in
-     let build_code = compile_to_bytecode build_reg in
-     let capture_code = compile_to_bytecode capture_reg in
+     let regex = oracle_regex la body in
+     let code = compile_to_bytecode regex in
      c.look_types.(lid) <- la;
      c.look_cdns.(lid) <- compile_cdns body;
      c.look_ast.(lid) <- body;
-     c.look_build_bc.(lid) <- build_code;
-     c.look_capture_bc.(lid) <- capture_code;
+     c.look_bc.(lid) <- code;
      compile_extra_bytecode body c
 
 let full_compilation (r:regex) (clemele: bool) : compiled_regex =
@@ -273,8 +262,7 @@ let full_compilation (r:regex) (clemele: bool) : compiled_regex =
   let looktypes = Array.make (maxlook+1) Lookahead in
   let lookcdns = Array.make (maxlook+1) [] in
   let lookast = Array.make (maxlook+1) Re_empty in
-  let build_look = Array.make (maxlook+1) empty_code in
-  let capture_look = Array.make (maxlook+1) empty_code in
+  let look = Array.make (maxlook+1) empty_code in
   let plus_code = Array.make (maxquant+1) empty_code in
   let main_code = match clemele with
                     | true -> compile_to_bytecode r
@@ -284,7 +272,7 @@ let full_compilation (r:regex) (clemele: bool) : compiled_regex =
   let compiled = {
       main_ast = r; main_bc = main_code; main_cdns = main_cdns;
       look_types = looktypes; look_cdns = lookcdns; look_ast = lookast;
-      look_build_bc = build_look; look_capture_bc = capture_look;
+      look_bc = look;
       plus_bc = plus_code } in
   compile_extra_bytecode r compiled; (* compile lookarounds, CIN & CDN *)
   compiled
