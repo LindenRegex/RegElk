@@ -807,32 +807,35 @@ let build_oracle (cr:compiled_regex) (str:string): oracles =
   (* Printf.printf "%s\n" (print_oracles os);
   flush stdout; *)
   os                             (* returning the modified oracle *)
-(** * Finding the main match and reconstructing lookaround capture groups  *)
-let rec dfs2 (o:oracle)(pos:int) (state:int) (shared_res:match_result) (oracle_res: oracle_res):unit = 
-  (* this is a tree so no need for visited check *)
-  if state = 0 then begin
-    if oracle_res.(pos).accept then
-      oracle_res.(pos) <- copy_match_result shared_res ;
-  end
-else begin
-  let cell = o.(pos).(state) in
-  let modified = ref false in
+let set_shared_res (cell: cell) (shared_res: match_result) : bool = 
   if cell.clock <> -1 then begin
     let res_reg = match cell.regtype with
     | Capture -> shared_res.capture
     | Lookaround -> shared_res.lookaround
     | Quantifier -> shared_res.quantifier
     in
-    if Option.is_some (Array_Regs.get_clock res_reg cell.reg) then begin
-      modified := true;
+    if Option.is_none (Array_Regs.get_clock res_reg cell.reg) then begin
       ignore(Array_Regs.set_reg res_reg cell.reg (Some cell.cp) cell.clock);
-    end;
+      true
+    end
+    else false
+  end
+  else false
+(** * Finding the main match and reconstructing lookaround capture groups  *)
+let rec dfs2 (o:oracle)(pos:int) (state:int) (shared_res:match_result) (oracle_res: oracle_res):unit = 
+  (* this is a tree so no need for visited check *)
+  let cell = o.(pos).(state) in
+  let modified = set_shared_res cell shared_res in
+  if state = 0 then begin
+    if oracle_res.(pos).accept then
+      oracle_res.(pos) <- copy_match_result shared_res ;
+  end
+  else begin
+    List.iter (fun (prev_pos, prev_state) ->
+      dfs2 o prev_pos prev_state shared_res oracle_res
+    ) cell.prev_states;
   end;
-  List.iter (fun (prev_pos, prev_state) ->
-    dfs2 o prev_pos prev_state shared_res oracle_res
-  ) cell.prev_states;
-
-  if !modified then begin
+  if modified then begin
     let res_reg = match cell.regtype with
     | Capture -> shared_res.capture
     | Lookaround -> shared_res.lookaround
@@ -841,8 +844,14 @@ else begin
     res_reg.a_cp.(cell.reg) <- -1;
     res_reg.a_clk.(cell.reg) <- -1;
     ignore(Array_Regs.set_reg res_reg cell.reg None (-1));
-  end;
   end
+
+let add_arr (regs:Regs.regs) (arr_regs: Array_Regs.regs): unit = 
+  let n = Array.length arr_regs.a_clk in
+  for i =0 to (n-1) do
+    if int_of_opt (Array_Regs.get_clock arr_regs i) <> -1 then
+      ignore(Regs.set_reg regs i (Array_Regs.get_cp arr_regs i) (int_of_opt (Array_Regs.get_clock arr_regs i)));
+  done
 (* returns the register array if there is a match *)
 (* also filters the return value for capture reset *)
 let build_capture (cr:compiled_regex) (str:string) (os:oracles): (int Array.t) list =
@@ -861,12 +870,12 @@ let build_capture (cr:compiled_regex) (str:string) (os:oracles): (int Array.t) l
   | None -> []
   | Some thread ->
      (* we have a match and want to rebuild capture groups in lookarounds*)
-    let capture_list = Regs.divide thread.capture_regs in
-    let look_list = Regs.divide thread.look_regs in
-    let quant_list = Regs.divide thread.quant_regs in
+    let capture_list =ref (Regs.divide thread.capture_regs) in
+    let look_list = ref (Regs.divide thread.look_regs) in
+    let quant_list = ref (Regs.divide thread.quant_regs) in
     for lid=1 to max_look do
       let oracle_res = create_oracle_res (String.length str) in
-      let cp_list = look_list |> List.map (fun x -> Regs.get_cp x lid) in
+      let cp_list = !look_list |> List.map (fun x -> Regs.get_cp x lid) in
       init_oracle_res oracle_res cp_list (2*max_cap+2) (max_look+1) (max_quant+1);
 
       for i=0 to String.length str do
@@ -874,6 +883,35 @@ let build_capture (cr:compiled_regex) (str:string) (os:oracles): (int Array.t) l
         let shared_res = create_match_result (2*max_cap+2) (max_look+1) (max_quant+1) in
         dfs2 os.(lid) i ((Array.length cr.look_capture_bc.(lid) ) - 1) shared_res oracle_res ;
       done;
+
+      let rec loop (capture_l: Regs.regs list) (look_l: Regs.regs list) (quant_l: Regs.regs list) (i:int)
+            : Regs.regs list * Regs.regs list * Regs.regs list =
+      match capture_l, look_l, quant_l with
+      | [], [], [] -> ([], [], [])
+      | capture :: capture_rest, look :: look_rest, quant :: quant_rest when Regs.get_cp look lid <> None->
+        let rc = ref capture and rl = ref look and rq = ref quant in
+        if i< 0 then failwith "the list and the array set values dont match"
+
+        else if oracle_res.(i).accept then  begin
+          add_arr !rc oracle_res.(i).capture;
+          add_arr !rl oracle_res.(i).lookaround;
+          add_arr !rq oracle_res.(i).quantifier;
+          let (capture_acc, look_acc, quant_acc) = loop capture_rest look_rest quant_rest (i-1) in
+          (!rc :: capture_acc, !rl :: look_acc, !rq :: quant_acc)
+        end
+        else
+          loop capture_l look_l quant_l (i-1)
+
+      | capture :: capture_rest, look :: look_rest, quant :: quant_rest -> 
+        let (capture_acc, look_acc, quant_acc) = loop capture_rest look_rest quant_rest i in
+        (capture :: capture_acc, look :: look_acc, quant :: quant_acc)      
+      | _ -> failwith "Lists must have the same length" in
+    
+      let (new_capture_list, new_look_list, new_quant_list) =( loop !capture_list !look_list !quant_list ((Array.length oracle_res)-1)) in
+      capture_list := new_capture_list;
+      look_list := new_look_list;
+      quant_list := new_quant_list;
+
     done;
     (* if !debug then
       begin
@@ -884,7 +922,7 @@ let build_capture (cr:compiled_regex) (str:string) (os:oracles): (int Array.t) l
         Printf.printf "pre-filtering clocks: %s\n%!" (debug_regs [preclocks]);
         Printf.printf "pre-filtering quant clocks: %s\n%!" (debug_regs [quantclocks]);
     end; *)
-    let match_capture = filter_reset cr.main_ast (Regs.combine capture_list) (Regs.combine look_list) (Regs.combine quant_list) (-1) in (* filtering old values *)
+    let match_capture = filter_reset cr.main_ast (Regs.combine !capture_list) (Regs.combine !look_list) (Regs.combine !quant_list) (-1) in (* filtering old values *)
     if !debug then Printf.printf "filtered regs: %s\n%!" (debug_regs match_capture);
     match_capture
 
