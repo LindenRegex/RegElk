@@ -587,7 +587,7 @@ let rec dfs (c:code) (str:string) (s:int) (pos:int) (o:oracle) (os:oracles) (dir
         if (is_satisfied a context dir)
         then dfs c str (s+1) pos o os dir cdns cdnt   (* keeping the thread alive *)
         else (pos, s)  (* killing the thread *)
-      | _ -> (pos, s)
+      | _ -> dfs c str (s+1) pos o os dir cdns cdnt
     (* dfs c str s pos o dir cdn *)
       in
       let res_cell = o.(result|>fst).(result|>snd) in
