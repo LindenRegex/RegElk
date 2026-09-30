@@ -14,7 +14,6 @@ type cell = {
   mutable prev_states: (int * int) list;
   mutable holds      : bool;
   mutable cp         : int;
-  mutable clock      : int;
   mutable reg        : int;
   mutable regtype    : regtype;
 }
@@ -22,9 +21,9 @@ type cell = {
 type oracle  = cell array array
 type oracles = oracle array
 
-let fresh_cell () = { visited = false; next_state = (-1, -1); prev_states = []; holds = false; cp = -1; clock= -1; reg= -1; regtype = Capture }
+let fresh_cell () = { visited = false; next_state = (-1, -1); prev_states = []; holds = false; cp = -1; reg= -1; regtype = Capture }
 
-let update_cell (o:oracle) (pos: int) (s: int) (next_state: int * int) (holds: bool) (cp: int) (clock : int) (reg: int) (regtype: regtype): unit=
+let update_cell (o:oracle) (pos: int) (s: int) (next_state: int * int) (holds: bool) (cp: int) (reg: int) (regtype: regtype): unit=
   let cell = o.(pos).(s) in  
   cell.next_state <- next_state;
 
@@ -35,7 +34,6 @@ let update_cell (o:oracle) (pos: int) (s: int) (next_state: int * int) (holds: b
 
   cell.holds <- holds;
   cell.cp <- cp;
-  cell.clock <- clock;
   cell.reg <- reg;
   cell.regtype <- regtype
   (* do we also need to have a type for register:(lookaround/ capture/ quantifier) *)

@@ -524,76 +524,75 @@ let null_interp (c:code) (s:interpreter_state) (o:oracles) (dir:direction): thre
   s.bestmatch
 
   (* Todo: should also return clock so the clocks in the execution are consistent *)
-let rec dfs (c:code) (str:string) (s:int) (pos:int) (clock:int) (o:oracle) (os:oracles) (dir:direction) (cdns:cdns) (cdnt:cdn_table): (int*int) * int =
+let rec dfs (c:code) (str:string) (s:int) (pos:int) (o:oracle) (os:oracles) (dir:direction) (cdns:cdns) (cdnt:cdn_table): int*int =
   if o.(pos).(s).visited then
-    ((pos, s), clock)
+    (pos, s)
   else begin
     (* maybe not calculate the context every time:) *)
     let context = cp_context pos str dir in
-    let clock = clock + 1 in
     o.(pos).(s).visited <- true;
-    let (result, nxt_clk) = match c.(s) with
+    let result = match c.(s) with
       | Consume ce ->
         (match context.nextchar with
         | Some _ when is_accepted context.nextchar ce -> begin
           (* Todo:  fix the position for directin and also update context *)
           (* Todo: should update cdn table here after each character but not sure what to do in backtracking*)
           let cdnt = build_cdn cdns pos os context dir in
-          dfs c str (s+1) (pos+1) clock o os dir cdns cdnt
+          dfs c str (s+1) (pos+1) o os dir cdns cdnt
           end;
-        | _ -> ((pos, s), clock)
+        | _ -> (pos, s)
         )
       | Accept ->
         o.(pos).(s).holds <- true;
-        ((pos, s), clock)
+        (pos, s)
       | Jmp x ->
-        dfs c str x pos clock o os dir cdns cdnt
+        dfs c str x pos o os dir cdns cdnt
       | Fork (x,y) ->
-        let (res1,clock) = dfs c str x pos clock o os dir cdns cdnt in
-        if o.(res1|>fst).(res1|>snd).holds then (res1,clock)
-        else dfs c str y pos clock o os dir cdns cdnt   
+        let res1 = dfs c str x pos o os dir cdns cdnt in
+        if o.(res1|>fst).(res1|>snd).holds then res1
+        else dfs c str y pos o os dir cdns cdnt   
       | SetRegisterToCP r ->
         (* Add clock here ! *)
-        let (res,nxt_clk) = dfs c str (s+1) pos clock o os dir cdns cdnt in
-        update_cell o pos s (pos, s+1) o.(res|>fst).(res|>snd).holds pos clock r Capture;
-        ((pos, s), nxt_clk)
+        let res = dfs c str (s+1) pos o os dir cdns cdnt in
+        update_cell o pos s (pos, s+1) o.(res|>fst).(res|>snd).holds pos r Capture;
+        (pos, s)
       | SetQuantToClock (q,b) ->
         (* saving the current cp if we are nulling a + *)
         let ocp = if b then ( pos) else -1 in
-        let (res,nxt_clk) = dfs c str (s+1) pos clock o os dir cdns cdnt in
-        update_cell o pos s (pos, s+1) o.(res|>fst).(res|>snd).holds ocp clock q Quantifier;
-        ((pos,s), nxt_clk)
+        let res = dfs c str (s+1) pos o os dir cdns cdnt in
+        update_cell o pos s (pos, s+1) o.(res|>fst).(res|>snd).holds ocp q Quantifier;
+        (pos,s)
       | CheckOracle l ->
         if (get_oracle os pos l)
         then begin
-            let (res,nxt_clk) = dfs c str (s+1) pos clock o os dir cdns cdnt in
-            update_cell o pos s (pos, s+1) o.(res|>fst).(res|>snd).holds pos clock l Lookaround;
-            ((pos, s), nxt_clk)
+            let res = dfs c str (s+1) pos o os dir cdns cdnt in
+            update_cell o pos s (pos, s+1) o.(res|>fst).(res|>snd).holds pos l Lookaround;
+            (pos, s)
           end
-        else ((pos, s), clock)
+        else (pos, s)
 
       | NegCheckOracle l ->
         if (get_oracle os pos l)
-        then ((pos, s), clock)   (* killing the thread *)
+        then (pos, s)   (* killing the thread *)
         else begin
-            let (res,nxt_clk) = dfs c str (s+1) pos clock o os dir cdns cdnt in
-            update_cell o pos s (pos, s+1) o.(res|>fst).(res|>snd).holds pos clock l Lookaround;
-            ((pos, s), nxt_clk)
+            let res = dfs c str (s+1) pos o os dir cdns cdnt in
+            update_cell o pos s (pos, s+1) o.(res|>fst).(res|>snd).holds pos l Lookaround;
+            (pos, s)
           end
       | CheckNullable qid ->
         if (cdn_get cdnt qid)
-        then dfs c str (s+1) pos clock o os dir cdns cdnt
-        else ((pos, s), clock)  (* killing the thread *)
+        then dfs c str (s+1) pos o os dir cdns cdnt
+        else (pos, s)  (* killing the thread *)
       | AnchorAssertion a ->
         if (is_satisfied a context dir)
-        then dfs c str (s+1) pos clock o os dir cdns cdnt   (* keeping the thread alive *)
-        else ((pos, s), clock)  (* killing the thread *)
-      | _ -> ((pos, s), clock)
+        then dfs c str (s+1) pos o os dir cdns cdnt   (* keeping the thread alive *)
+        else (pos, s)  (* killing the thread *)
+      | _ -> (pos, s)
     (* dfs c str s pos o dir cdn *)
       in
       let res_cell = o.(result|>fst).(result|>snd) in
-      update_cell o pos s result res_cell.holds res_cell.cp res_cell.clock res_cell.reg res_cell.regtype;
-      (result,nxt_clk)
+      update_cell o pos s result res_cell.holds res_cell.cp res_cell.reg res_cell.regtype;
+      result
   end
 
 (** * Finding the top priority match in a bytecode automaton  *)
@@ -801,38 +800,38 @@ let build_oracle (cr:compiled_regex) (str:string): oracles =
     (* inside lookarounds in the oracle building phase *)
     let cdnt = build_cdn lookcdn initcp os initctx direction in
     for  i=0 to (String.length str) do 
-      ignore(dfs bytecode str 0 i 0 os.(lid) os direction lookcdn cdnt);
+      ignore(dfs bytecode str 0 i os.(lid) os direction lookcdn cdnt);
     done;
   done;
   (* Printf.printf "%s\n" (print_oracles os);
   flush stdout; *)
   os                             (* returning the modified oracle *)
-let set_shared_res (cell: cell) (shared_res: match_result) : bool = 
-  if cell.clock <> -1 then begin
+let set_shared_res (cell: cell) (shared_res: match_result) (clock:int) : bool = 
+  if cell.reg <> -1 then begin
     let res_reg = match cell.regtype with
     | Capture -> shared_res.capture
     | Lookaround -> shared_res.lookaround
     | Quantifier -> shared_res.quantifier
     in
     if Option.is_none (Array_Regs.get_clock res_reg cell.reg) then begin
-      ignore(Array_Regs.set_reg res_reg cell.reg (Some cell.cp) cell.clock);
+      ignore(Array_Regs.set_reg res_reg cell.reg (Some cell.cp) clock);
       true
     end
     else false
   end
   else false
 (** * Finding the main match and reconstructing lookaround capture groups  *)
-let rec dfs2 (o:oracle)(pos:int) (state:int) (shared_res:match_result) (oracle_res: oracle_res):unit = 
+let rec dfs2 (o:oracle)(pos:int) (state:int) (shared_res:match_result) (oracle_res: oracle_res) (clock:int):unit = 
   (* this is a tree so no need for visited check *)
   let cell = o.(pos).(state) in
-  let modified = set_shared_res cell shared_res in
+  let modified = set_shared_res cell shared_res clock in
   if state = 0 then begin
     if oracle_res.(pos).accept then
       oracle_res.(pos) <- copy_match_result shared_res ;
   end
   else begin
     List.iter (fun (prev_pos, prev_state) ->
-      dfs2 o prev_pos prev_state shared_res oracle_res
+      dfs2 o prev_pos prev_state shared_res oracle_res (clock-1)
     ) cell.prev_states;
   end;
   if modified then begin
@@ -852,6 +851,30 @@ let add_arr (regs:Regs.regs) (arr_regs: Array_Regs.regs): unit =
     if int_of_opt (Array_Regs.get_clock arr_regs i) <> -1 then
       ignore(Regs.set_reg regs i (Array_Regs.get_cp arr_regs i) (int_of_opt (Array_Regs.get_clock arr_regs i)));
   done
+  let rec update_regs (oracle_res:oracle_res) (lid:int) (capture_l: Regs.regs list) (look_l: Regs.regs list) (quant_l: Regs.regs list) (i:int)
+          : Regs.regs list * Regs.regs list * Regs.regs list =
+    match capture_l, look_l, quant_l with
+    | [], [], [] -> ([], [], [])
+    | capture :: capture_rest, look :: look_rest, quant :: quant_rest when Regs.get_cp look lid <> None->
+      let rc = ref capture and rl = ref look and rq = ref quant in
+      if i< 0 then failwith "the list and the array set values dont match"
+
+      else if oracle_res.(i).accept then  begin
+        add_arr !rc oracle_res.(i).capture;
+        add_arr !rl oracle_res.(i).lookaround;
+        add_arr !rq oracle_res.(i).quantifier;
+        let (capture_acc, look_acc, quant_acc) = 
+          update_regs oracle_res lid capture_rest look_rest quant_rest (i-1) in
+        (!rc :: capture_acc, !rl :: look_acc, !rq :: quant_acc)
+      end
+      else
+        update_regs oracle_res lid capture_l look_l quant_l (i-1)
+
+    | capture :: capture_rest, look :: look_rest, quant :: quant_rest -> 
+      let (capture_acc, look_acc, quant_acc) = 
+        update_regs oracle_res lid capture_rest look_rest quant_rest i in
+      (capture :: capture_acc, look :: look_acc, quant :: quant_acc)      
+    | _ -> failwith "Lists must have the same length"
 (* returns the register array if there is a match *)
 (* also filters the return value for capture reset *)
 let build_capture (cr:compiled_regex) (str:string) (os:oracles): (int Array.t) list =
@@ -878,40 +901,17 @@ let build_capture (cr:compiled_regex) (str:string) (os:oracles): (int Array.t) l
       let cp_list = !look_list |> List.map (fun x -> Regs.get_cp x lid) in
       init_oracle_res oracle_res cp_list (2*max_cap+2) (max_look+1) (max_quant+1);
 
-      for i=0 to String.length str do
-        (* start dfs from accepting state *)
+      let n = String.length str in
+      let m = Array.length cr.look_capture_bc.(lid) in
+      for i=0 to n do (* start dfs from accepting state *)
         let shared_res = create_match_result (2*max_cap+2) (max_look+1) (max_quant+1) in
-        dfs2 os.(lid) i ((Array.length cr.look_capture_bc.(lid) ) - 1) shared_res oracle_res ;
+        dfs2 os.(lid) i (m - 1) shared_res oracle_res (n*m);
       done;
-
-      let rec loop (capture_l: Regs.regs list) (look_l: Regs.regs list) (quant_l: Regs.regs list) (i:int)
-            : Regs.regs list * Regs.regs list * Regs.regs list =
-      match capture_l, look_l, quant_l with
-      | [], [], [] -> ([], [], [])
-      | capture :: capture_rest, look :: look_rest, quant :: quant_rest when Regs.get_cp look lid <> None->
-        let rc = ref capture and rl = ref look and rq = ref quant in
-        if i< 0 then failwith "the list and the array set values dont match"
-
-        else if oracle_res.(i).accept then  begin
-          add_arr !rc oracle_res.(i).capture;
-          add_arr !rl oracle_res.(i).lookaround;
-          add_arr !rq oracle_res.(i).quantifier;
-          let (capture_acc, look_acc, quant_acc) = loop capture_rest look_rest quant_rest (i-1) in
-          (!rc :: capture_acc, !rl :: look_acc, !rq :: quant_acc)
-        end
-        else
-          loop capture_l look_l quant_l (i-1)
-
-      | capture :: capture_rest, look :: look_rest, quant :: quant_rest -> 
-        let (capture_acc, look_acc, quant_acc) = loop capture_rest look_rest quant_rest i in
-        (capture :: capture_acc, look :: look_acc, quant :: quant_acc)      
-      | _ -> failwith "Lists must have the same length" in
-    
-      let (new_capture_list, new_look_list, new_quant_list) =( loop !capture_list !look_list !quant_list ((Array.length oracle_res)-1)) in
+      let (new_capture_list, new_look_list, new_quant_list) =
+        update_regs oracle_res lid !capture_list !look_list !quant_list ((Array.length oracle_res)-1) in
       capture_list := new_capture_list;
       look_list := new_look_list;
       quant_list := new_quant_list;
-
     done;
     (* if !debug then
       begin
