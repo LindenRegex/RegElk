@@ -522,6 +522,8 @@ let null_interp (c:code) (s:interpreter_state) (o:oracles) (dir:direction): thre
       Printf.printf "%s\n%!" (print_blocked s.blocked);
     end;
   s.bestmatch
+let next_state cur_state next_state=
+    next_state * 2 + cur_state mod 2
 
   (* Todo: should also return clock so the clocks in the execution are consistent *)
 let rec dfs (c:code) (str:string) (s:int) (pos:int) (o:oracle) (os:oracles) (dir:direction) (cdns:cdns) (cdnt:cdn_table): int*int =
@@ -531,14 +533,16 @@ let rec dfs (c:code) (str:string) (s:int) (pos:int) (o:oracle) (os:oracles) (dir
     (* maybe not calculate the context every time:) *)
     let context = cp_context pos str dir in
     o.(pos).(s).visited <- true;
-    let result = match c.(s) with
+    let result = match c.(s/2) with
       | Consume ce ->
         (match context.nextchar with
         | Some _ when is_accepted context.nextchar ce -> begin
           (* Todo:  fix the position for directin and also update context *)
           (* Todo: should update cdn table here after each character but not sure what to do in backtracking*)
           let cdnt = build_cdn cdns pos os context dir in
-          dfs c str (s+1) (pos+1) o os dir cdns cdnt
+          match s mod 2 with
+          | 1   -> dfs c str (s+1) (pos+1) o os dir cdns cdnt
+          | 0|_ -> dfs c str (s+2) (pos+1) o os dir cdns cdnt
           end;
         | _ -> (pos, s)
         )
@@ -546,27 +550,30 @@ let rec dfs (c:code) (str:string) (s:int) (pos:int) (o:oracle) (os:oracles) (dir
         o.(pos).(s).holds <- true;
         (pos, s)
       | Jmp x ->
+        let x = next_state s x in
         dfs c str x pos o os dir cdns cdnt
       | Fork (x,y) ->
+        let x = next_state s x in
+        let y = next_state s y in
         let res1 = dfs c str x pos o os dir cdns cdnt in
         if o.(res1|>fst).(res1|>snd).holds then res1
         else dfs c str y pos o os dir cdns cdnt   
       | SetRegisterToCP r ->
         (* Add clock here ! *)
-        let res = dfs c str (s+1) pos o os dir cdns cdnt in
-        update_cell o pos s (pos, s+1) o.(res|>fst).(res|>snd).holds pos r Capture;
+        let res = dfs c str (s+2) pos o os dir cdns cdnt in
+        update_cell o pos s (pos, s+2) o.(res|>fst).(res|>snd).holds pos r Capture;
         (pos, s)
       | SetQuantToClock (q,b) ->
         (* saving the current cp if we are nulling a + *)
         let ocp = if b then ( pos) else -1 in
-        let res = dfs c str (s+1) pos o os dir cdns cdnt in
-        update_cell o pos s (pos, s+1) o.(res|>fst).(res|>snd).holds ocp q Quantifier;
+        let res = dfs c str (s+2) pos o os dir cdns cdnt in
+        update_cell o pos s (pos, s+2) o.(res|>fst).(res|>snd).holds ocp q Quantifier;
         (pos,s)
       | CheckOracle l ->
         if (get_oracle os pos l)
         then begin
-            let res = dfs c str (s+1) pos o os dir cdns cdnt in
-            update_cell o pos s (pos, s+1) o.(res|>fst).(res|>snd).holds pos l Lookaround;
+            let res = dfs c str (s+2) pos o os dir cdns cdnt in
+            update_cell o pos s (pos, s+2) o.(res|>fst).(res|>snd).holds pos l Lookaround;
             (pos, s)
           end
         else (pos, s)
@@ -575,19 +582,29 @@ let rec dfs (c:code) (str:string) (s:int) (pos:int) (o:oracle) (os:oracles) (dir
         if (get_oracle os pos l)
         then (pos, s)   (* killing the thread *)
         else begin
-            let res = dfs c str (s+1) pos o os dir cdns cdnt in
-            update_cell o pos s (pos, s+1) o.(res|>fst).(res|>snd).holds pos l Lookaround;
+            let res = dfs c str (s+2) pos o os dir cdns cdnt in
+            update_cell o pos s (pos, s+2) o.(res|>fst).(res|>snd).holds pos l Lookaround;
             (pos, s)
           end
       | CheckNullable qid ->
         if (cdn_get cdnt qid)
-        then dfs c str (s+1) pos o os dir cdns cdnt
+        then dfs c str (s+2) pos o os dir cdns cdnt
         else (pos, s)  (* killing the thread *)
       | AnchorAssertion a ->
         if (is_satisfied a context dir)
-        then dfs c str (s+1) pos o os dir cdns cdnt   (* keeping the thread alive *)
+        then dfs c str (s+2) pos o os dir cdns cdnt   (* keeping the thread alive *)
         else (pos, s)  (* killing the thread *)
-      | _ -> dfs c str (s+1) pos o os dir cdns cdnt
+      | BeginLoop -> begin
+        match s mod 2 with
+        |1 -> dfs c str (s+2) pos o os dir cdns cdnt
+        |0|_ -> dfs c str (s+3) pos o os dir cdns cdnt
+        end
+      | EndLoop -> begin
+        match s mod 2 with
+        |1-> (pos, s)
+        |0|_ -> dfs c str (s+2) pos o os dir cdns cdnt
+        end
+      | _ -> dfs c str (s+2) pos o os dir cdns cdnt
     (* dfs c str s pos o dir cdn *)
       in
       let res_cell = o.(result|>fst).(result|>snd) in
@@ -828,6 +845,9 @@ let rec dfs2 (o:oracle)(pos:int) (state:int) (shared_res:match_result) (oracle_r
   if state = 0 then begin
     if oracle_res.(pos).accept then
       oracle_res.(pos) <- copy_match_result shared_res ;
+      (*Todo: let before_thread = init_thread oracle_res.(pos).capture initlook initquant 
+      let new_thread = reconstruct_plus_groups thread cr.look_ast.(lid) cr.plus_bc str os Forward in
+      oracle_res.(pos).capture <- new_thread.capture_regs; *)
   end
   else begin
     List.iter (fun (prev_pos, prev_state) ->
@@ -904,7 +924,8 @@ let build_capture (cr:compiled_regex) (str:string) (os:oracles): (int Array.t) l
       let m = Array.length cr.look_bc.(lid) in
       for i=0 to n do (* start dfs from accepting state *)
         let shared_res = create_match_result (2*max_cap+2) (max_look+1) (max_quant+1) in
-        dfs2 os.(lid) i (m - 1) shared_res oracle_res ((n+1)*m);
+        (* only check the accept which exit allowed is true *)
+        dfs2 os.(lid) i (2*m - 2) shared_res oracle_res ((n+1)*(m*2));
       done;
       let (new_capture_list, new_look_list, new_quant_list) =
         update_regs oracle_res lid !capture_list !look_list !quant_list in

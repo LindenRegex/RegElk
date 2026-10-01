@@ -23,6 +23,14 @@ end = struct
 
 (** * Manual Testing *)
 let my_tests () =
+  let raw13 = Raw_lookaround(NegLookahead,Raw_count({min=1;max=None;greedy=true},Raw_lookaround(NegLookahead,Raw_character(Dot)))) in
+  let str13 = "a" in
+  ignore(CMP.compare_engines_all raw13 str13);
+
+  let raw12 = Raw_lookaround(Lookahead,Raw_capture(Raw_lookaround(Lookahead,Raw_character(Char('-'))))) in
+  let str12 = "-" in
+  ignore(CMP.compare_engines_all raw12 str12);
+
   let raw11 = Raw_lookaround(Lookahead,Raw_quant(QuestionMark,Raw_capture(Raw_lookaround(NegLookahead,Raw_character(NegClass([])))))) in
   let str11 = "" in
   ignore(CMP.compare_engines_all raw11 str11);

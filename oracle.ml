@@ -42,7 +42,7 @@ let create_oracles (str_len : int) (state_counts : int array) : oracles =
   state_counts
   |> Array.map (fun n_states ->
        Array.init (str_len + 1) (fun _ ->
-         Array.init n_states (fun _ -> fresh_cell ())))
+         Array.init (n_states*2) (fun _ -> fresh_cell ())))
 
 (* we only allow setting to true, there's no reason to set an entry of the table back to false *)
 (* let set_oracle (o:oracles) (cp:int) (lookid:int): unit =
