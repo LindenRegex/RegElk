@@ -23,10 +23,27 @@ end = struct
 
 (** * Manual Testing *)
 let my_tests () =
+  (* nullable quantifiers inside lookarounds *)
+  let raw16 = Raw_con(Raw_capture(Raw_character(Char('-'))),Raw_lookaround(Lookahead,Raw_quant(Plus,Raw_quant(Plus,Raw_capture(Raw_anchor(NonWordBoundary)))))) in
+  let str16 = "--" in
+  ignore(CMP.compare_engines_all raw16 str16);
+
+  let raw15 = Raw_capture(Raw_capture(Raw_lookaround(Lookahead,Raw_quant(Plus,Raw_con(Raw_lookaround(Lookahead,Raw_empty),Raw_con(Raw_capture(Raw_anchor(WordBoundary)),Raw_character(Dot))))))) in
+  let str15 = "--bb-b-aba" in
+  ignore(CMP.compare_engines_all raw15 str15);
+
+  (* CDN tests in lookarounds*)
+  let raw14 = Raw_lookaround(NegLookahead,Raw_con(
+                Raw_character(NegClass([])),
+                Raw_quant(Plus,Raw_lookaround(NegLookahead,Raw_character(NegClass([])))))) in
+  let str14 = "-" in
+  ignore(CMP.compare_engines_all raw14 str14);
+
   let raw13 = Raw_lookaround(NegLookahead,Raw_count({min=1;max=None;greedy=true},Raw_lookaround(NegLookahead,Raw_character(Dot)))) in
   let str13 = "a" in
   ignore(CMP.compare_engines_all raw13 str13);
 
+  (* lookaround tests *)
   let raw12 = Raw_lookaround(Lookahead,Raw_capture(Raw_lookaround(Lookahead,Raw_character(Char('-'))))) in
   let str12 = "-" in
   ignore(CMP.compare_engines_all raw12 str12);

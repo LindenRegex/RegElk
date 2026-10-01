@@ -539,7 +539,8 @@ let rec dfs (c:code) (str:string) (s:int) (pos:int) (o:oracle) (os:oracles) (dir
         | Some _ when is_accepted context.nextchar ce -> begin
           (* Todo:  fix the position for directin and also update context *)
           (* Todo: should update cdn table here after each character but not sure what to do in backtracking*)
-          let cdnt = build_cdn cdns pos os context dir in
+          let new_context = cp_context (pos+1) str dir in
+          let cdnt = build_cdn cdns (pos+1) os new_context dir in
           match s mod 2 with
           | 1   -> dfs c str (s+1) (pos+1) o os dir cdns cdnt
           | 0|_ -> dfs c str (s+2) (pos+1) o os dir cdns cdnt
@@ -808,20 +809,20 @@ let build_oracle (cr:compiled_regex) (str:string): oracles =
     (* Todo: handle backward lookaround too*)
     let direction = Forward(*oracle_direction looktype*) in
     let lookcdn = cr.look_cdns.(lid) in
-    let initcp = init_cp direction (String.length str) in
-    let initctx = cp_context initcp str direction in
     (* TODO: we could reuse capture, lookmem and quants instead of reallocating for each lookaround *)
     if !verbose then Printf.printf "%s\n" (print_code bytecode);
     if !verbose then Printf.printf "%s\n" (print_cdns lookcdn);
     (* no need to call find_match_plus, we don't care about any capture groups *)
     (* inside lookarounds in the oracle building phase *)
-    let cdnt = build_cdn lookcdn initcp os initctx direction in
+    (* Todo: precompute cdn so we dont need to calculate every time *)
     for  i=0 to (String.length str) do 
+      let initctx = cp_context i str direction in
+      let cdnt = build_cdn lookcdn i os initctx direction in
       ignore(dfs bytecode str 0 i os.(lid) os direction lookcdn cdnt);
     done;
   done;
-  (* Printf.printf "%s\n" (print_oracles os);
-  flush stdout; *)
+  Printf.printf "%s\n" (print_oracles os);
+  flush stdout;
   os                             (* returning the modified oracle *)
 let set_shared_res (cell: cell) (shared_res: match_result) (clock:int) : bool = 
   if cell.reg <> -1 then begin
