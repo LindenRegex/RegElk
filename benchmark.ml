@@ -37,7 +37,7 @@ let warmups = ref 10
 let repetitions = ref 10
 
 
-(* calling the matcher.native executable *)
+(* calling the matcher.exe executable *)
 (* returning the rdtsc measuring *)
 let get_time_ocaml (bin: string) (r:raw_regex) (str:string) (impl:string): string =
   let regex_string = " \""^print_js r^"\" " in
@@ -70,12 +70,12 @@ let get_time_irregexp (r:raw_regex) (str:string): string =
 (* measures rdtsc time for each engine *)
 let get_time (e:engine) (r:raw_regex) (str:string) (impl:string): string =
   match e with
-  | OCaml -> get_time_ocaml "./matcher.native" r str impl
+  | OCaml -> get_time_ocaml "_build/default/matcher.exe" r str impl
   | OCamlBench -> failwith "get_time incompatible with OCamlBench engine"
   | OldV8Linear -> get_time_oldv8linear r str
   | NewV8Linear -> get_time_newv8linear r str
   | Irregexp -> get_time_irregexp r str
-  | LinearBaseline -> get_time_ocaml "./linearbaseline.native" r str "ListRegs"
+  | LinearBaseline -> get_time_ocaml "_build/default/linearbaseline.exe" r str "ListRegs"
 
 
 (* runs a regex-size benchmark on a single engine and prints the result to a csv file *)
@@ -150,7 +150,7 @@ let main =
      ("-warmups", Arg.Set_int warmups, "Number of Warmup Repetitions per iteration");
      ("-repet", Arg.Set_int repetitions, "Number of Measured Repetitions");
     ] in
-  let usage = "./benchmark.native [-oldv8 path_to_old_d8] [-newv8 path_to_new_d8] [-warmups 10] [-repet 10] benchmark list\n" in
+  let usage = "_build/default/benchmark.exe [-oldv8 path_to_old_d8] [-newv8 path_to_new_d8] [-warmups 10] [-repet 10] benchmark list\n" in
   let full_usage = usage ^ "\nAvailable benchmarks: " ^ bench_names_string in
   Arg.parse speclist (fun s -> bench_list := s::!bench_list) full_usage;
   List.iter exec_bench (List.map benchmark_vector_of_string !bench_list)

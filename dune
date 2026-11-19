@@ -2,7 +2,8 @@
 
 (executables
  (public_names main tests fuzzer stats linearbaseline matcher benchmark)
- (libraries unix ocaml_intrinsics core_bench core core_unix.command_unix yojson))
+ (libraries unix ocaml_intrinsics core_bench core core_unix.command_unix yojson)
+ (modes native))
 
 (ocamllex regex_lexer)
 

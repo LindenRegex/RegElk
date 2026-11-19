@@ -75,7 +75,7 @@ let main =
      ("-list", Arg.Unit (fun _ -> reg_implem := RegList), "Use List registers");
     ] in
 
-  let usage = "./main.native [-regex \"(b)|.*\"] [-string \"abc\"] [-v] [-d] [-cmp]" in
+  let usage = "_build/default/main.exe [-regex \"(b)|.*\"] [-string \"abc\"] [-v] [-d] [-cmp]" in
   Arg.parse speclist (fun _ -> ()) usage;
 
   (* if no regex or string were provided, ask the user to input them *)

@@ -195,7 +195,7 @@ let main =
      ("-seed", Arg.Set_int random_seed, "Random seed");
     ] in
 
-  let usage = "./fuzzer.native [-tests 1000] [-seed 0]" in
+  let usage = "_build/default/fuzzer.exe [-tests 1000] [-seed 0]" in
   Arg.parse speclist (fun _ -> ()) usage;
   Random.init !random_seed;
   fuzzer()

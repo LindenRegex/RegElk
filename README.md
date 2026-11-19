@@ -57,24 +57,25 @@ Named capture groups, hexadecimal escapes, unicode escapes, unicode properties a
 
 ## Dependencies
 
-Install all dependencies with Opam by running `opam install .`
+Install all dependencies with Opam by running `opam install . --deps-only`
 
 You also need to install Node.JS and have `node` in your path.
 
 ## Usage
-Build all executables with `make`. 
+Build all executables with `dune build`.
 Make sure to have configured your opam switch so that it has all dependencies listed above.
-This creates several executables:
+This creates several executables in `_build/default`:
 
-- `main.native` is the Ocaml matcher
-- `fuzzer.native` is a fuzzer that compares the OCaml matcher to the Irregexp engine of V8 in Node
-- `tests.native` contains a battery of tests that should all succeed
-- `stats.native` computes regex feature usage statistics from corpora of regexes
-- `benchmark.native` allows you to run benchmarks
-- `matcher.native` and `linearbaseline.native` are only used for the benchmarks and you should not run them directly
+- `main.exe` is the OCaml matcher
+- `fuzzer.exe` is a fuzzer that compares the OCaml matcher to the Irregexp engine of V8 in Node
+- `tests.exe` contains a battery of tests that should all succeed
+- `stats.exe` computes regex feature usage statistics from corpora of regexes
+- `benchmark.exe` allows you to run benchmarks
+- `matcher.exe` and `linearbaseline.exe` are only used for the benchmarks and you should not run them directly
 
 
-`main.native`, `fuzzer.native` and `benchmark.native` have command line options that can be printed with the argument `--help`.
+`main.exe`, `fuzzer.exe` and `benchmark.exe` have command line options that can be printed with the argument `--help`.  
+`benchmark.exe` should be run from the root directory of the project, not from `_build/default/`.
 
 ## Files
 
@@ -88,7 +89,7 @@ This creates several executables:
 - the oracles used y the lookaround algorithm is defined in `oracle.ml`
 - the three capture registers implementations are defined in `regs.ml`
 - character classes are implemented in `charclasses.ml`
-- the ECMA-style regex parser is defined in `parser_src/`
+- the ECMA-style regex parser is defined in `regex_lexer.mll` (lexer) and `regex_parser.mly` (parser)
 
 ### Other Tools
 - the differential fuzzer is implemented in `fuzzer.ml`
