@@ -72,7 +72,7 @@ term:
   | a=assertion { a }
   | a=atom { a }
   | a=atom q=quantifier { Raw_quant(q,a) }
-  | a=atom cq=counted_quantifier { Raw_count(cq,a) }
+  | a=atom cq=counted_quantifier { Regex.Raw_count(cq,a) }
 /* separation between usual quantifier and counted ones since they are separate in the OCaml engine AST. Could be changed if needed */
 
 assertion:
@@ -214,7 +214,7 @@ characterclassescape:
 
 characterclass:
   | LBRACK HAT c=classcontents RBRACK { NegClass c }
-  | LBRACK c=classcontents RBRACK { Class c }
+  | LBRACK c=classcontents RBRACK { Regex.Class c }
 
 classcontents:
   | { [] }

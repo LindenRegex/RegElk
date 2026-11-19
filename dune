@@ -1,0 +1,11 @@
+(env (dev (flags :standard -warn-error -27-32-33-35-39-50-69)))
+
+(executables
+ (public_names main tests fuzzer stats linearbaseline matcher benchmark)
+ (libraries unix ocaml_intrinsics core_bench core core_unix.command_unix yojson))
+
+(ocamllex regex_lexer)
+
+(menhir
+ (modules regex_parser))
+
