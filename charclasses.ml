@@ -166,7 +166,7 @@ let rec build_range (current:char*char) (next:(char*char) list) : (char*char) li
 
 let class_to_range (c:char_class) : (char*char) list =
   let lranges = class_flatten c in
-  let lsort = List.sort (fun (start1,e1) (start2,e2) -> if start1 > start2 then 1 else -1) lranges in
+  let lsort = List.sort (fun [@warning "-27"] (start1,e1) (start2,e2) -> if start1 > start2 then 1 else -1) lranges in
   match lsort with
   | [] -> []
   | head::tail -> build_range head tail

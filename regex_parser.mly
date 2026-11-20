@@ -166,7 +166,7 @@ patterncharacter:
 
 
 atomescape:
-  | d=decimalescape { raise Regex.Unsupported_backref }
+  | decimalescape { raise Regex.Unsupported_backref }
   | c=characterclassescape { Raw_character(Group c) }
   | c=characterescape { Raw_character(Char c) }
   | LOWK { raise Regex.Unsupported_named_groups }
@@ -290,7 +290,7 @@ classescape:
   | LOWB { CChar (char_of_int 8) }	/* basckspace ascii character */
   | c=characterclassescape { CGroup c }
   | c=characterescape  { CChar c }
-  | d=decimalescape { raise Regex.Unsupported_octal }
+  | decimalescape { raise Regex.Unsupported_octal }
 
 
 %%

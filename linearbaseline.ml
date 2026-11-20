@@ -1,9 +1,3 @@
-let input_str = ref ""
-
-let input_regex = ref ""
-let str_set = ref false
-let rgx_set = ref false
-
 let linear_scan r s =
   let arr = Array.make_matrix (String.length r) (String.length s) false in
   for ridx = 0 to String.length r - 1 do
@@ -19,14 +13,14 @@ let linear_scan r s =
   done;
  !sum
 
-let main =
+let _ =
   let regex = Sys.argv.(1) in
   let string = Sys.argv.(2) in
   let warmups = int_of_string(Sys.argv.(3)) in
   let repetitions = int_of_string(Sys.argv.(4)) in
 
   let sum = ref 0 in
-  for i=0 to (warmups-1) do
+  for [@warning "-35"] i=0 to (warmups-1) do
     sum := !sum + linear_scan regex string
   done;
 
@@ -36,7 +30,7 @@ let main =
 
   (* measuring matches *)
   let tstart = Timer.now() in
-  for i = 0 to (repetitions - 1) do
+  for [@warning "-35"] i = 0 to (repetitions - 1) do
     sum := !sum + linear_scan regex string
   done;
   let time = Timer.elapsed tstart in

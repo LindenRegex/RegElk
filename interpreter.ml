@@ -3,9 +3,6 @@
 
 open Bytecode
 open Regex
-open Map
-open Array
-open Format
 open Oracle
 open Compiler
 open Cdn
@@ -179,7 +176,7 @@ type interpreter_state =
     mutable blocked: (thread*char_expectation) list;   (* threads stuck at a Consume instruction. low to high priority. *)
     mutable isblocked: pcset;       (* already blocked pcs, to avoid duplicates *)
     mutable bestmatch: thread option;   (* best match found so far, but there might be a higher priotity one still *)
-    mutable context: char_context;             (* prev and next character at the current position *)
+    context: char_context;             (* prev and next character at the current position *)
     mutable clock: int;                 (* global clock *)
     mutable cdn: cdn_table;             (* nullability table for cdn + *)
   }
@@ -287,7 +284,7 @@ let print_result (r:regex) (str:string) (c:(int Array.t) option) : string =
 (* We use the quantifier registers to filter out those that are too old *)
 
 (* modifies regs in-place *)
-let rec filter_capture (r:regex) (cap_regs:int Array.t) (cap_clocks: int Array.t) (look_clocks:int Array.t) (quant_clocks:int Array.t) (maxclock:int) : unit =
+let [@warning "-27"] rec filter_capture (r:regex) (cap_regs:int Array.t) (cap_clocks: int Array.t) (look_clocks:int Array.t) (quant_clocks:int Array.t) (maxclock:int) : unit =
   match r with
   | Re_empty | Re_character _ | Re_anchor _ -> ()
   | Re_alt (r1,r2) -> filter_capture r1 cap_regs cap_clocks look_clocks quant_clocks maxclock;
@@ -321,7 +318,7 @@ let rec filter_capture (r:regex) (cap_regs:int Array.t) (cap_clocks: int Array.t
                              (* resetting the maxclock to -1: lookaround clocks are reset *)
        end
 
-and filter_all (r:regex) (regs:int Array.t) : unit = (* clearing all capture group inside a regex *)
+and [@warning "-27"] filter_all (r:regex) (regs:int Array.t) : unit = (* clearing all capture group inside a regex *)
   match r with
   | Re_empty | Re_character _ | Re_anchor _ -> ()
   | Re_alt (r1,r2) -> filter_all r1 regs; filter_all r2 regs
@@ -531,7 +528,7 @@ let reconstruct_plus_groups (thread:thread) (ast:regex) (plus_bc:code Array.t) (
   let look = ref thread.look_regs in
   let quant = ref thread.quant_regs in
   (* goes through the regex, if it encounters a nulled +, it calls the null interpreter *)
-  let rec nulled_plus (reg:regex) : unit =
+  let [@warning "-27"] rec nulled_plus (reg:regex) : unit =
     match reg with
     | Re_empty | Re_character _ -> ()
     | Re_alt (r1, r2) | Re_con (r1, r2) ->
@@ -566,7 +563,7 @@ let reconstruct_plus_groups (thread:thread) (ast:regex) (plus_bc:code Array.t) (
   (* goes through the subregex when a plus above was nulled *)
   (* for all its children that got nulled while nulling the parent plus, *)
   (* the CDN table can be shared *)
-  and nulled_children (reg:regex) (cdnt:cdn_table) (cp:int) : unit =
+  and [@warning "-27"] nulled_children (reg:regex) (cdnt:cdn_table) (cp:int) : unit =
     match reg with
     | Re_empty | Re_character _ -> ()
     | Re_alt (r1, r2) | Re_con (r1, r2) ->

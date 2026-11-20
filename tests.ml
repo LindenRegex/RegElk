@@ -6,9 +6,7 @@ open Oracle
 open Regex
 open Bytecode
 open Compiler
-open Cdn
 open Interpreter
-open Tojs
 open Flags
 open Regs
 
@@ -366,7 +364,7 @@ let tests () =
 end
 
 (* Running all tests *)
-let main =
+let _ =
 
   verbose := false;
   debug := false;

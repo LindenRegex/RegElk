@@ -48,7 +48,7 @@ type comp_type =
 (* [fresh] is the next available instruction label *)
 (* also returns the next fresh label after compilation *)
 (* if the option progress is false, then this generates code that cannot make progress in the string *)
-let rec compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist * label  =
+let [@warning "-27"] rec compile (r:regex) (fresh:label) (ctype:comp_type): instruction treelist * label  =
   match r with
   | Re_empty -> (Leaf [], fresh)
   | Re_character c ->

@@ -2,9 +2,6 @@
 
 
 open Regex
-open Regex_parser
-open Regex_lexer
-open Yojson
 open Yojson.Basic.Util
 
 (** * Gathering Statistics  *)
@@ -109,7 +106,7 @@ let rec has_potentially_capture_just_for_grouping (r:raw_regex) : bool =
   | Raw_lookaround (_,r1) -> has_potentially_capture_just_for_grouping r1
 
 (* has dot lazy star *)
-let rec has_dls (r:raw_regex) : bool =
+let [@warning "-27"] rec has_dls (r:raw_regex) : bool =
   match r with
   | Raw_empty | Raw_character _ | Raw_anchor _ -> false
   | Raw_con(r1,r2) | Raw_alt(r1,r2) -> has_dls r1 || has_dls r2
@@ -132,7 +129,7 @@ let rec has_dls (r:raw_regex) : bool =
      end
 
 (* has dot greedy star *)
-let rec has_dgs (r:raw_regex) : bool =
+let [@warning "-27"] rec has_dgs (r:raw_regex) : bool =
   match r with
   | Raw_empty | Raw_character _ | Raw_anchor _ -> false
   | Raw_con(r1,r2) | Raw_alt(r1,r2) -> has_dgs r1 || has_dgs r2
@@ -193,7 +190,7 @@ let merge (a:literal*int) (b:literal*int) : literal * int =
     let s1' = drop_first_n s1 (n - n1) in
     let s2' = drop_first_n s2 (n - n2) in
     (Prefix (common_prefix s1' s2'), n)
-let chain (l1:literal*int) (l2:literal*int) : literal * int =
+let [@warning "-27"] chain (l1:literal*int) (l2:literal*int) : literal * int =
   match l1, l2 with
   | (Exact s1, n1), (Exact s2, 0) -> (Exact (s1 ^ s2), n1)
   | (Exact s1, n1), (Exact s2, _) -> (Prefix s1, n1)
@@ -201,7 +198,7 @@ let chain (l1:literal*int) (l2:literal*int) : literal * int =
   | (Exact s1, n1), (Prefix s2, _) -> (Prefix s1, n1)
   | (Prefix s1, n1), _ -> (Prefix s1, n1)
 
-let rec extract_literal (r:raw_regex) : literal * int =
+let [@warning "-27"] rec extract_literal (r:raw_regex) : literal * int =
   match r with
   | Raw_empty -> (Exact "", 0)
   | Raw_character c ->
@@ -219,7 +216,7 @@ let rec extract_literal (r:raw_regex) : literal * int =
   | Raw_lookaround (_,r1) -> (Exact "", 0)
   | Raw_anchor _ -> (Exact "", 0)
 
-let rec has_impossible_literal (r:raw_regex) : bool =
+let [@warning "-27"] rec has_impossible_literal (r:raw_regex) : bool =
     match r with
     | Raw_character (Class []) -> true
     | Raw_character c -> false
@@ -424,10 +421,10 @@ let print_result (p:parse_result): string =
   | OK r -> report_raw r
 
 (* fails if the regex is not correct *)
-let parse_raw (str:string) : raw_regex =
+(*let parse_raw (str:string) : raw_regex =
   let r:raw_regex = Regex_parser.main Regex_lexer.token (Lexing.from_string str) in
   assert (regex_wf r);
-  r
+  r*)
 
 (* printing statistics results *)
 let print_stats (s:support_stats) : string =
@@ -481,7 +478,7 @@ let print_stats_csv (s:support_stats) : string =
     s.anchored s.reverse_anchored s.double_anchored s.captures_for_grouping s.no_captures in
   csv_header ^ "\n" ^ csv_values
 
-let analyze_regex (regex_str:string) (stats:support_stats) =
+let [@warning "-27"] analyze_regex (regex_str:string) (stats:support_stats) =
   let result = parse regex_str stats in
   match result with
   | OK r -> if false then   (* select what you want to print *)
@@ -522,7 +519,7 @@ let analyze_single_corpus filename single: unit =
   Printf.printf ("%s\n%!") result
 
 
-let main =
+let _ =
   let corpora = [("corpus/npm-uniquePatterns.json",true);
                  ("corpus/pypi-uniquePatterns.json",true);
                  ("corpus/internetSources-regExLib.json",false);

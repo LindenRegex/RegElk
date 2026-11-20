@@ -9,7 +9,6 @@
 
 open Regex
 open Oracle
-open Bytecode
 open Anchors
 
 (** * CDN Table  *)
@@ -61,7 +60,7 @@ let rec interpret_cdn (f:cdn_formula) (cp:int) (o:oracle) (t:cdn_table) (ctx:cha
 (** * Compiling to CDN formulas *)
 (* generates the formula that expresses when a regex is nullable *)
 (* this minimizes the formula as we are building it *)
-let rec compile_cdnf (r:regex) : cdn_formula =
+let [@warning "-27"] rec compile_cdnf (r:regex) : cdn_formula =
   match r with
   | Re_empty -> CDN_true
   | Re_character _ -> CDN_false
@@ -138,7 +137,7 @@ let compile_cdns (r:regex): cdns =
 
 (** * Building the CDN Table  *)
 (* the interpreter performs this at each step to know which CDN is nullable *)
-let rec build_cdn (cdns:cdns) (cp:int) (o:oracle) (ctx:char_context) (dir:direction): cdn_table =
+let build_cdn (cdns:cdns) (cp:int) (o:oracle) (ctx:char_context) (dir:direction): cdn_table =
   let table = ref (init_cdn()) in
   List.iter(fun (qid,formula) ->
       let eval = interpret_cdn formula cp o !table ctx dir in

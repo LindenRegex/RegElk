@@ -1,13 +1,6 @@
-open Oracle
 open Regex
-open Bytecode
-open Compiler
-open Cdn
 open Interpreter
-open Tojs
-open Charclasses
 open Flags
-open Regs
 
 (* different registers implementations *)
 type reg_impl =
@@ -31,12 +24,12 @@ let parse_raw (str:string) : raw_regex =
   r
 
 (* Appendix example *)
-let appendix_regex : raw_regex =
+let [@warning "-32"] appendix_regex : raw_regex =
   let behind = Raw_lookaround(Lookbehind,Raw_con(raw_char('c'),raw_star(Raw_capture(raw_char('a'))))) in
   let ahead = Raw_lookaround(Lookahead,Raw_con(raw_star(raw_char('a')),Raw_con(behind,raw_char('b')))) in
   Raw_con(Raw_capture(raw_char('c')),raw_star(Raw_con(raw_char('a'),ahead)))
 
-let appendix_string : string = "caab"
+let [@warning "-32"] appendix_string : string = "caab"
 
 (* choosing the right functions depending on the register implementation *)
 let compare (ri:reg_impl) : raw_regex -> string -> bool =
@@ -62,7 +55,7 @@ let linear (ri:reg_impl) : raw_regex -> string -> string =
 
 
 
-let main =
+let _ =
 
   let speclist =
     [("-regex", Arg.Tuple [Arg.Set_string input_regex; Arg.Set rgx_set], "Regex");

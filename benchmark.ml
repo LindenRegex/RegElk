@@ -4,13 +4,7 @@
 
 open Regex
 open Tojs
-open Toexp
-open Interpreter
-open Sys
-open Unix
-open Gc
 open Flags
-open Arg
 open Benchmark_vectors
 
 (* path to V8 executable *)
@@ -93,7 +87,7 @@ let run_regex_config (ec:engine_conf) (param_regex:int->raw_regex) (str:string) 
   Unix.sleep 1
 
 (* TODO add regex range in addition to str range in single function *)
-let run_ocamlbench_config (ec:engine_conf) (param_str:int->string) (reg:raw_regex) (name:string) : unit =
+let [@warning "-27"] run_ocamlbench_config (ec:engine_conf) (param_str:int->string) (reg:raw_regex) (name:string) : unit =
   failwith "TODO"
 
 
@@ -138,7 +132,7 @@ let exec_bench (bench: benchmark) : unit =
   | SB b -> run_string_benchmark b
 
 
-let main =
+let _ =
   debug := false;
   verbose := false;
 

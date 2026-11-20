@@ -2,10 +2,7 @@
 (* so that we can compare our algorithms to a JS engine *)
 
 open Regex
-open Sys
-open Filename
 open Interpreter
-open Charclasses
 open Flags
 
 (** * JS Regex pretty-printing  *)

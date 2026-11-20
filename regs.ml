@@ -8,9 +8,6 @@
 (* For each of these data-structures, there will be at most O(r*s) insertions *)
 (* And there will be at most O(r*r) different active values at the same time *)
 
-open Array
-open Map
-
 
 module IntMap = Map.Make(struct type t = int let compare = compare end)
 
@@ -117,7 +114,7 @@ module List_Regs =
 
     (* O(r*s) *)
     let get_cp (regs:regs) (k:int) : int option =
-      let rec get_rec (l:(int*int*int) list) : int option =
+      let [@warning "-27"] rec get_rec (l:(int*int*int) list) : int option =
         match l with
         | [] -> None
         | (kl,cp,clk)::l' ->
@@ -127,7 +124,7 @@ module List_Regs =
 
     (* O(r*s) *)
     let get_clock (regs:regs) (k:int) : int option =
-      let rec get_rec (l:(int*int*int) list) : int option =
+      let [@warning "-27"] rec get_rec (l:(int*int*int) list) : int option =
         match l with
         | [] -> None
         | (kl,cp,clk)::l' ->
@@ -155,7 +152,7 @@ module List_Regs =
       (a_cp, a_clk)
 
     let to_string (regs:regs) : string =
-      let rec to_string_rec (l:(int*int*int) list) : string =
+      let [@warning "-27"] rec to_string_rec (l:(int*int*int) list) : string =
       match l with
       | [] -> ""
       | (k,cp,clk)::l' ->
@@ -189,13 +186,13 @@ module Map_Regs =
       regs
 
     (* O(log r) *)
-    let get_cp (regs:regs) (k:int) : int option =
+    let [@warning "-27"] get_cp (regs:regs) (k:int) : int option =
       match (IntMap.find_opt k regs.valmap) with
       | None -> None
       | Some (cp,clk) -> opt_of_int cp
 
     (* O(log r) *)
-    let get_clock (regs:regs) (k:int) : int option =
+    let [@warning "-27"] get_clock (regs:regs) (k:int) : int option =
       match (IntMap.find_opt k regs.valmap) with
       | None -> None
       | Some (cp,clk) -> opt_of_int clk

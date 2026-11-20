@@ -1,14 +1,7 @@
 open Interpreter
-open Oracle
 open Regex
-open Bytecode
 open Compiler
-open Cdn
-open Tojs
-open Toexp
-open Charclasses
 open Flags
-open Regs
 
 module INTARRAY = Interpreter(Regs.Array_Regs)
 module INTLIST = Interpreter(Regs.List_Regs)
@@ -41,12 +34,6 @@ let get_build_capture (s:string) =
 - a string indicating the type of register implementation to use "ArrayRegs", "ListRegs" or "MapRegs" *)
 (* Prints the total time in seconds *)
 
-let input_str = ref ""
-let input_regex = ref ""
-let str_set = ref false
-let rgx_set = ref false
-let compare_js = ref false
-
 (* fails if the regex is not correct *)
 let parse_raw (str:string) : raw_regex =
   let r:raw_regex = Regex_parser.main Regex_lexer.token (Lexing.from_string str) in
@@ -54,7 +41,7 @@ let parse_raw (str:string) : raw_regex =
   r
 
 
-let main =
+let _ =
   (* disabling debug/verbose output *)
   debug := false;
   verbose := false;
@@ -79,7 +66,7 @@ let main =
   (* Warmup *)
   (* this shouldn't change anything for this engine *)
   (* but we do it anyway to mirror our evaluation of the V8Linear engine *)
-  for i=0 to (warmups-1) do
+  for [@warning "-35"] i=0 to (warmups-1) do
     ignore(matcher compiled_regex string)
   done;
 
@@ -88,7 +75,7 @@ let main =
 
   (* measuring matches *)
   let tstart = Timer.now() in
-  for i = 0 to (repetitions - 1) do
+  for [@warning "-35"] i = 0 to (repetitions - 1) do
     let o = build_oracle compiled_regex string in
     ignore(build_capture compiled_regex string o)
   done;

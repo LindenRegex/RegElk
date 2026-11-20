@@ -330,7 +330,7 @@ let rec reverse_regex (r:regex) : regex =
 (* during the 1st stage of the algorithm, we don't care about extracting capture groups *)
 (* so we can clean the regex to remove capture groups *)
 (* We also remove the annotations in the quantifiers because there is no need to clear capture registers *)
-let rec remove_capture (r:regex) : regex =
+let [@warning "-27"] rec remove_capture (r:regex) : regex =
   match r with
   | Re_empty | Re_character _ | Re_anchor _ -> r
   | Re_alt (r1, r2) -> Re_alt (remove_capture r1, remove_capture r2)
@@ -369,7 +369,7 @@ let get_look (r:regex) (lid:lookid) : regex * lookaround =
   | _ -> failwith "Cannot find lookaround"
 
 (* extracting a quantifier body given its quantifier id *)
-let rec get_quantifier (r:regex) (qid:quantid) : (regex * counted_quantifier) option =
+let [@warning "-27"] rec get_quantifier (r:regex) (qid:quantid) : (regex * counted_quantifier) option =
   match r with
   | Re_empty | Re_character _ | Re_anchor _ -> None
   | Re_alt (r1, r2) | Re_con (r1, r2) ->
@@ -389,7 +389,7 @@ let get_quant (r:regex) (qid:quantid) : regex * counted_quantifier =
   | _ -> failwith "Cannot find quantifier"
 
 (* Returns the maximum used lookaround in a regex *)
-let rec max_lookaround (r:regex) : lookid =
+let [@warning "-27"] rec max_lookaround (r:regex) : lookid =
   match r with
   | Re_empty | Re_character _ | Re_anchor _ -> 0
   | Re_alt (r1, r2) | Re_con (r1, r2) -> max (max_lookaround r1) (max_lookaround r2)

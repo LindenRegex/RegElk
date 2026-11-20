@@ -1,4 +1,4 @@
-(env (dev (flags :standard -warn-error -27-32-33-35-39-50-69)))
+(env (dev (flags :standard -warn-error -50)))
 
 (executables
  (public_names main tests fuzzer stats linearbaseline matcher benchmark)

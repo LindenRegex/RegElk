@@ -1,8 +1,6 @@
 (** * Defining the Oracl type and operations  *)
 (* the array in which we store for each position of the string if each lookaround can be matched or not *)
 
-open Array
-
 type oracle = bool Array.t Array.t
 
 let create_oracle (str_size:int) (look_nb:int): oracle =

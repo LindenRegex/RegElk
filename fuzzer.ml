@@ -2,9 +2,7 @@
 (* randomly generating regexes and strings and comparing the output of our algorithm VS the JS matcher *)
 
 open Interpreter
-open Tojs
 open Regex
-open Random
 open Charclasses
 open Flags
 open Regs
@@ -159,7 +157,7 @@ let fuzzer () : unit =
   let total_ln = ref 0 in
   let total_timeout = ref 0 in
 
-  for i = 0 to !max_tests do
+  for [@warning "-35"] i = 0 to !max_tests do
     let raw = random_raw() in
     let str = random_string() in
     let comp = CMP.compare_engines raw str in
@@ -185,7 +183,7 @@ let fuzzer () : unit =
 
 
 (* calling the fuzzer *)
-let main =
+let _ =
 
   verbose := false;
   debug := false;

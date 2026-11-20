@@ -71,7 +71,7 @@ let print_instruction (i:instruction) : string =
   | AnchorAssertion a -> "AnchorAssertion " ^ print_anchor a
   | Fail -> "Fail"
 
-let rec print_code (c:code) : string =
+let print_code (c:code) : string =
   let s = ref "" in
   for i=0 to (size c)-1 do
     s := !s ^ "\027[33m" ^ string_of_int i ^ ":\027[0m " ^ print_instruction (get_instr c i) ^ "\n"

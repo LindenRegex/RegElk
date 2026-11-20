@@ -1,6 +1,5 @@
 {
 open Regex_parser
-open Lexing
 
 exception SyntaxError of string
 }
