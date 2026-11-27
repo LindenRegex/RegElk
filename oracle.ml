@@ -25,17 +25,18 @@ let fresh_cell () = { visited = false; next_state = (-1, -1); prev_states = []; 
 
 let update_cell (o:oracle) (pos: int) (s: int) (next_state: int * int) (holds: bool) (cp: int) (reg: int) (regtype: regtype): unit=
   let cell = o.(pos).(s) in  
-  cell.next_state <- next_state;
-
-  if next_state <> (-1, -1) && next_state <> (pos,s) then
+  
+  if next_state <> (-1, -1) && next_state <> (pos,s) then begin
+    cell.next_state <- next_state;
     let (next_pos, next_s) = next_state in
     let next_cell = o.(next_pos).(next_s) in
     next_cell.prev_states <- (pos, s) :: next_cell.prev_states;
 
-  cell.holds <- holds;
-  cell.cp <- cp;
-  cell.reg <- reg;
-  cell.regtype <- regtype
+    cell.holds <- holds;
+    cell.cp <- cp;
+    cell.reg <- reg;
+    cell.regtype <- regtype;
+  end
   (* do we also need to have a type for register:(lookaround/ capture/ quantifier) *)
 (*Todo: the lookarounds ids start at 1 but here not sure if the state_counts list is reversed or not:) *)
 let create_oracles (str_len : int) (state_counts : int array) : oracles =
@@ -114,18 +115,55 @@ let rec init_oracle_res (res:oracle_res) (cp_list: int option list) (capture_cnt
 
 let print_oracles (o:oracles) : string =
   let format_oracle (idx:int) (oracle:oracle) : string =
-    let rows =
-      Array.mapi
-        (fun pos states ->
+    let format_rows (format_cell:int -> cell -> string * int) =
+      let state_count =
+        if Array.length oracle = 0 then 0 else Array.length oracle.(0)
+      in
+      let column_widths = Array.make state_count 0 in
+      let rows =
+        Array.mapi
+          (fun pos states -> pos, Array.mapi (fun s cell -> format_cell s cell) states)
+          oracle
+      in
+      Array.iter
+        (fun (_, cells) ->
+          Array.iteri
+            (fun s (_, width) ->
+              column_widths.(s) <- max column_widths.(s) width)
+            cells)
+        rows;
+      let position_width =
+        max 1 (String.length (string_of_int (max 0 (Array.length oracle - 1))))
+      in
+      Array.map
+        (fun (pos, cells) ->
           let values =
             Array.mapi
-              (fun s cell ->
-                Printf.sprintf "%d:%s" s (print_bool cell.holds))
-              states
+              (fun s (value, width) ->
+                if s = Array.length cells - 1 then value
+                else value ^ String.make (column_widths.(s) - width) ' ')
+              cells
           in
-          Printf.sprintf "\027[36m%d:\027[0m [%s]" pos (String.concat " " (Array.to_list values)))
-        oracle
+          Printf.sprintf "\027[36m%*d:\027[0m [%s]"
+            position_width pos (String.concat " " (Array.to_list values)))
+        rows
     in
-    Printf.sprintf "\027[31mOracle %d:\027[0m\n%s\n" idx (String.concat "\n" (Array.to_list rows))
+    let holds_rows =
+      format_rows (fun s cell ->
+        Printf.sprintf "%d:%s" s (print_bool cell.holds),
+        String.length (string_of_int s) + 2)
+    in
+    let next_state_rows =
+      format_rows (fun s cell ->
+        let next_pos, next_state = cell.next_state in
+        let color = if cell.holds then "\027[32m" else "\027[31m" in
+        let value = Printf.sprintf "%d:(%d,%d)" s next_pos next_state in
+        color ^ value ^ "\027[0m", String.length value)
+    in
+    Printf.sprintf
+      "\027[31mOracle %d:\027[0m\nHolds:\n%s\nNext states:\n%s\n"
+      idx
+      (String.concat "\n" (Array.to_list holds_rows))
+      (String.concat "\n" (Array.to_list next_state_rows))
   in
   String.concat "\n" (Array.to_list (Array.mapi format_oracle o))

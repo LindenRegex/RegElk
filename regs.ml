@@ -24,6 +24,7 @@ module type REGS =
     (* we might remove get_cp and get_clock and always convert to an array first for filtering *)
     val get_cp: regs -> int -> int option
     val get_clock: regs -> int -> int option
+    val print_reg: regs -> int -> string
     val copy: regs -> regs
     val to_arrays: regs -> int Array.t * int Array.t
     val divide: regs -> regs list
@@ -75,6 +76,10 @@ module Array_Regs =
     let get_clock (regs:regs) (k:int) : int option =
       let v = regs.a_clk.(k) in
       opt_of_int v
+
+    let print_reg (regs:regs) (k:int) : string =
+      Printf.sprintf "%d: %d | %d" k
+        (int_of_opt (get_cp regs k)) (int_of_opt (get_clock regs k))
 
     let divide (regs:regs): regs list =
       [regs]
@@ -143,6 +148,10 @@ module List_Regs =
            if (kl = k) then opt_of_int clk
            else get_rec l' in
       get_rec regs.setlist
+
+    let print_reg (regs:regs) (k:int) : string =
+      Printf.sprintf "%d: %d | %d" k
+        (int_of_opt (get_cp regs k)) (int_of_opt (get_clock regs k))
 
     (* O(1) *)
     let copy (regs:regs) : regs =
@@ -241,6 +250,10 @@ module Map_Regs =
       match (IntMap.find_opt k regs.valmap) with
       | None -> None
       | Some (cp,clk) -> opt_of_int clk
+
+    let print_reg (regs:regs) (k:int) : string =
+      Printf.sprintf "%d: %d | %d" k
+        (int_of_opt (get_cp regs k)) (int_of_opt (get_clock regs k))
 
     (* O(1) *)
     let copy (regs:regs) : regs =

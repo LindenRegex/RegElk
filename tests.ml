@@ -23,7 +23,15 @@ end = struct
 
 (** * Manual Testing *)
 let my_tests () =
+  let raw18 = Raw_lookaround(Lookahead,Raw_quant(Plus,Raw_lookaround(Lookahead,Raw_capture(Raw_empty)))) in
+  let str18 = "" in
+  ignore(CMP.compare_engines_all raw18 str18);
+
   (* nullable quantifiers inside lookarounds *)
+  let raw17 = Raw_lookaround(Lookahead,Raw_count({min=1;max=None;greedy=true},Raw_capture(Raw_character(Char('b'))))) in
+  let str17 = "bb" in
+  ignore(CMP.compare_engines_all raw17 str17);
+
   let raw16 = Raw_con(Raw_capture(Raw_character(Char('-'))),Raw_lookaround(Lookahead,Raw_quant(Plus,Raw_quant(Plus,Raw_capture(Raw_anchor(NonWordBoundary)))))) in
   let str16 = "--" in
   ignore(CMP.compare_engines_all raw16 str16);

@@ -849,12 +849,12 @@ let rec dfs2 (o:oracle)(pos:int) (state:int) (shared_res:match_result) (oracle_r
       (*Todo: let before_thread = init_thread oracle_res.(pos).capture initlook initquant 
       let new_thread = reconstruct_plus_groups thread cr.look_ast.(lid) cr.plus_bc str os Forward in
       oracle_res.(pos).capture <- new_thread.capture_regs; *)
-  end
-  else begin
-    List.iter (fun (prev_pos, prev_state) ->
-      dfs2 o prev_pos prev_state shared_res oracle_res (clock-1)
-    ) cell.prev_states;
   end;
+
+  List.iter (fun (prev_pos, prev_state) ->
+    dfs2 o prev_pos prev_state shared_res oracle_res (clock-1)
+  ) cell.prev_states;
+
   if modified then begin
     let res_reg = match cell.regtype with
     | Capture -> shared_res.capture
@@ -944,7 +944,19 @@ let build_capture (cr:compiled_regex) (str:string) (os:oracles): (int Array.t) l
         Printf.printf "pre-filtering clocks: %s\n%!" (debug_regs [preclocks]);
         Printf.printf "pre-filtering quant clocks: %s\n%!" (debug_regs [quantclocks]);
     end; *)
-    let match_capture = filter_reset cr.main_ast (Regs.combine !capture_list) (Regs.combine !look_list) (Regs.combine !quant_list) (-1) in (* filtering old values *)
+    
+    thread.capture_regs <- Regs.combine !capture_list;
+    thread.look_regs <- Regs.combine !look_list;
+    thread.quant_regs <- Regs.combine !quant_list;
+
+    for lid = 1 to max_look do
+      let new_thread = reconstruct_plus_groups thread cr.look_ast.(lid) cr.plus_bc str os Forward in
+      thread.capture_regs <- new_thread.capture_regs;
+      thread.look_regs    <- new_thread.look_regs;
+      thread.quant_regs   <- new_thread.quant_regs;
+
+    done;
+    let match_capture = filter_reset cr.main_ast (thread.capture_regs) (thread.look_regs) (thread.quant_regs) (-1) in (* filtering old values *)
     if !debug then Printf.printf "filtered regs: %s\n%!" (debug_regs match_capture);
     match_capture
 
